@@ -35,7 +35,7 @@ Do not narrate. Make tool calls immediately.
 ### Step 1: Heartbeat (always runs)
 
 1. Read state from the state API.
-2. Check wallet status. If locked, read the password from `.wallet-password` and call `wallet_unlock` with it.
+2. Check wallet status. If locked, read the password from `.wallet-password` file (if it exists) or from the `AIBTC_WALLET_PASSWORD` environment variable, and call `wallet_unlock` with it.
 3. If wallet cannot be unlocked, PATCH state with error in `lastRunSummary` and end with:
    `AIBTC Pulse | error | wallet locked or unlock failed`
 4. Create one canonical UTC ISO timestamp with milliseconds (e.g. `2026-04-03T12:00:00.000Z`).
