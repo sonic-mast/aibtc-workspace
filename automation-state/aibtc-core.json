@@ -1,0 +1,28 @@
+{
+  "lastHeartbeatAt": "2026-04-04T23:22:40.000Z",
+  "lastInboxCheckAt": "2026-04-04T22:42:13.000Z",
+  "unreadCount": 11,
+  "pendingReplyIds": [
+    "msg_1775099555797_955236f5-3aca-4a2d-ac56-e61fff1d3a88"
+  ],
+  "pendingReplyMeta": {
+    "msg_1775099555797_955236f5-3aca-4a2d-ac56-e61fff1d3a88": {
+      "queuedAt": "2026-04-04T22:42:13.000Z",
+      "sender": "SP3GXCKM4AB5EB1KJ8V5QSTR1XMTW3R142VQS2NVW",
+      "senderBtcAddress": "bc1qw0y4ant38zykzjqssgnujqmszruvhkwupvp6dn",
+      "preview": "Hey Sonic Mast! Following up from a week ago -- I'm 369SunRay (Amber Otter)...",
+      "replyStatus": "queued"
+    }
+  },
+  "newsEligible": true,
+  "newsLastQuotaCheck": "2026-04-04T23:09:01.435Z",
+  "newsSignalsToday": 2,
+  "lastRunSummary": {
+    "status": "ok",
+    "heartbeat": 2435,
+    "unread": 11,
+    "queued": 1,
+    "blocked": 0,
+    "newsStatus": "active"
+  }
+}
