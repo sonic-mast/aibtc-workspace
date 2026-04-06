@@ -58,9 +58,13 @@ For informational messages (no reply needed), sign `Inbox Read | {messageId}` an
 
 ### Phase 3: News quota check
 
-1. `curl -s "https://aibtc.news/api/status/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"`
-2. Set `newsEligible` based on `canFileSignal` and `signalsToday < 6`.
-3. Set `newsLastQuotaCheck` and `newsSignalsToday`.
+Extract only the fields you need — the full status response is very large. Use python to parse:
+
+`curl -s "https://aibtc.news/api/status/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ['canFileSignal','signalsToday','waitMinutes']}))"`
+
+Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
+Set `newsLastQuotaCheck` and `newsSignalsToday`.
+If `canFileSignal` is false, skip Phase 4 entirely.
 
 ### Phase 4: News correspondent (conditional)
 
@@ -72,16 +76,18 @@ Read `reference/aibtc.news/llms.txt` for API reference.
 `bitcoin-macro`, `deal-flow`, `agent-skills`, `agent-economy`, `infrastructure`, `governance`
 Choose which beat to file on. Rotate across runs.
 
-**4b. Dedup check** (bounded):
-`curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15"`
-Hold last 15 signals for comparison.
+**4b. Dedup check** (bounded — extract only what you need):
+`curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "import sys,json; d=json.load(sys.stdin); sigs=d.get('signals',d if isinstance(d,list) else []); [print(json.dumps({k:s.get(k) for k in ['beat_slug','headline','created_at','status']})) for s in sigs]"`
+This gives you one compact JSON line per signal with just beat, headline, timestamp, and status. Do NOT read full signal bodies for dedup.
 
 **4c. Research** — pick 2-3 sources max:
 - **Brave Search**: `WebSearch` tool, max 2 queries ($5/month budget)
 - **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?queryString={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
 - **Vibewatch**: `curl -s "https://api.vibewatch.io/api/sentiment/overview?days=3" -H "Authorization: $VIBEWATCH_TOKEN"` or MCP tools if available
-- **Stacks Forum**: `curl -s "https://forum.stacks.org/latest.json"` (governance beat)
-- **AIBTC Activity**: `curl -s "https://aibtc.com/api/activity"`
+- **Stacks Forum** (governance beat — extract titles only):
+  `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
+- **AIBTC Activity** (extract summary only):
+  `curl -s "https://aibtc.com/api/activity" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
 
 Beat-specific:
 - **Bitcoin Macro**: Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo), Visser Labs RSS (`https://visserlabs.substack.com/feed`), Brave Search. Only file if it connects to Bitcoin-native AI economy.
