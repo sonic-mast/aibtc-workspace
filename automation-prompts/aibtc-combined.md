@@ -83,7 +83,7 @@ This gives you one compact JSON line per signal with just beat, headline, timest
 
 **4c. Research** — pick 2-3 sources max:
 - **Brave Search**: `WebSearch` tool, max 2 queries ($5/month budget)
-- **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?queryString={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
+- **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?query={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
 - **Vibewatch**: `curl -s "https://api.vibewatch.io/api/sentiment/overview?days=3" -H "Authorization: $VIBEWATCH_TOKEN"` or MCP tools if available
 - **Stacks Forum** (governance beat — extract titles only):
   `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
@@ -101,7 +101,7 @@ Beat-specific:
 **4d. Dedup filter**: Same headline/topic as last 15 signals → skip. Filed within 3 hours on same beat → skip.
 
 **4e. File signal**:
-1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources, tags, disclosure.
+1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags, disclosure.
 2. Launch Agent to sign: `POST /api/signals:{unix_timestamp}` — return `{"signature": "...", "timestamp": "..."}`
 3. POST:
    ```

@@ -34,11 +34,25 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/") {
-      return Response.json({
-        service: "sonic-mast-heartbeat",
-        status: "ok",
-        schedule: "every 15 minutes"
-      });
+      try {
+        const state = await env.STATE_WORKER.fetch("https://state/state", {
+          headers: { "Authorization": `Bearer ${env.STATE_API_TOKEN}` }
+        }).then(r => r.json());
+        return Response.json({
+          agent: "Sonic Mast",
+          address: "bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47",
+          schedule: "every 15 minutes",
+          lastHeartbeat: state.lastHeartbeatAt,
+          unreadCount: state.unreadCount,
+          newsSignalsToday: state.newsSignalsToday,
+        });
+      } catch {
+        return Response.json({
+          agent: "Sonic Mast",
+          schedule: "every 15 minutes",
+          status: "ok",
+        });
+      }
     }
 
     if (url.pathname === "/run") {
@@ -87,37 +101,40 @@ async function doHeartbeat(env) {
     throw new Error(`Heartbeat failed: ${data.error || JSON.stringify(data)}`);
   }
 
-  // 5. Update state API
-  const stateUrl = "https://sonic-mast-state.brandonmarshall.workers.dev/state";
-  const currentState = await fetch(stateUrl, {
-    headers: { "Authorization": `Bearer ${env.STATE_API_TOKEN}` }
-  }).then(r => r.json());
-
-  const updatedState = {
-    ...currentState,
-    lastHeartbeatAt: data.checkIn?.lastCheckInAt || timestamp,
-    unreadCount: data.orientation?.unreadCount || currentState.unreadCount || 0,
-    lastRunSummary: {
-      ...currentState.lastRunSummary,
-      heartbeat: data.checkIn?.checkInCount,
-      level: data.levelName
-    }
+  // 5. Update state API via Service Binding (direct Worker-to-Worker, no public URL needed)
+  const authHeaders = {
+    "Authorization": `Bearer ${env.STATE_API_TOKEN}`,
+    "Content-Type": "application/json"
   };
-
-  await fetch(stateUrl, {
-    method: "PUT",
-    headers: {
-      "Authorization": `Bearer ${env.STATE_API_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(updatedState)
-  });
+  let stateStatus = "skipped";
+  try {
+    const stateWorker = env.STATE_WORKER;
+    const getResp = await stateWorker.fetch("https://state/state", {
+      headers: { "Authorization": `Bearer ${env.STATE_API_TOKEN}` }
+    });
+    if (getResp.ok) {
+      const current = await getResp.json();
+      current.lastHeartbeatAt = timestamp;
+      current.unreadCount = data.orientation?.unreadCount ?? current.unreadCount ?? 0;
+      const putResp = await stateWorker.fetch("https://state/state", {
+        method: "PUT",
+        headers: authHeaders,
+        body: JSON.stringify(current)
+      });
+      stateStatus = putResp.ok ? "ok" : `put-failed:${putResp.status}`;
+    } else {
+      stateStatus = `get-failed:${getResp.status}`;
+    }
+  } catch (e) {
+    stateStatus = `error:${e.message}`;
+  }
 
   return {
     success: true,
-    checkInCount: data.checkIn?.checkInCount,
-    level: data.levelName,
+    checkInCount: data.orientation?.checkInCount,
+    level: data.orientation?.levelName,
     unread: data.orientation?.unreadCount,
+    stateUpdate: stateStatus,
     timestamp
   };
 }

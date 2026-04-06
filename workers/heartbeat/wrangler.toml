@@ -3,5 +3,9 @@ main = "worker.js"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+[[services]]
+binding = "STATE_WORKER"
+service = "sonic-mast-state"
+
 [triggers]
 crons = ["*/15 * * * *"]
