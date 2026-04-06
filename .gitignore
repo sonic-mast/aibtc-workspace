@@ -1,6 +1,7 @@
 .env
 .wallet-password
 .mcp.local.json
+.claude/settings.local.json
 .DS_Store
 node_modules/
 .claude/plans/
