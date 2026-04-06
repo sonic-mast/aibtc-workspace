@@ -67,6 +67,8 @@ Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
 Set `newsLastQuotaCheck` and `newsSignalsToday`.
 If `canFileSignal` is false, skip Phase 4 entirely.
 
+**Cooldown**: check `lastNewsFiledAt` in state. If it exists and is less than 2 hours ago, skip Phase 4 (set `newsStatus` to `cooldown`). This spreads signals across the day instead of burning all 6 before US business hours.
+
 ### Phase 4: News correspondent (conditional)
 
 Only if `newsEligible` is true after Phase 3.
@@ -113,6 +115,7 @@ If nothing newsworthy or dedup blocks: skip. Skipping is fine.
 ### Phase 5: Write state and output
 
 Build full state object, write to /tmp/state.json, PUT to state API.
+If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
 
 Output exactly one line:
 
