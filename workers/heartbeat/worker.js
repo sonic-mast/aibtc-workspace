@@ -149,7 +149,19 @@ async function doHeartbeat(env) {
     throw new Error(`Heartbeat failed: ${data.error || JSON.stringify(data)}`);
   }
 
-  // 5. Update state API via Service Binding (direct Worker-to-Worker, no public URL needed)
+  // 5. Get actual received-unread count (orientation inflates with outbound unreads)
+  let inboxUnread = 0;
+  try {
+    const inboxResp = await fetch(
+      `https://aibtc.com/api/inbox/${address}?status=unread`
+    );
+    if (inboxResp.ok) {
+      const inboxData = await inboxResp.json();
+      inboxUnread = inboxData?.inbox?.messages?.length ?? 0;
+    }
+  } catch { /* non-fatal — keep 0 */ }
+
+  // 6. Update state API via Service Binding (direct Worker-to-Worker, no public URL needed)
   const authHeaders = {
     "Authorization": `Bearer ${env.STATE_API_TOKEN}`,
     "Content-Type": "application/json"
@@ -163,7 +175,7 @@ async function doHeartbeat(env) {
     if (getResp.ok) {
       const current = await getResp.json();
       current.lastHeartbeatAt = timestamp;
-      current.unreadCount = data.orientation?.unreadCount ?? current.unreadCount ?? 0;
+      current.unreadCount = inboxUnread;
       const putResp = await stateWorker.fetch("https://state/state", {
         method: "PUT",
         headers: authHeaders,
@@ -181,7 +193,7 @@ async function doHeartbeat(env) {
     success: true,
     checkInCount: data.orientation?.checkInCount,
     level: data.orientation?.levelName,
-    unread: data.orientation?.unreadCount,
+    unread: inboxUnread,
     stateUpdate: stateStatus,
     timestamp
   };
