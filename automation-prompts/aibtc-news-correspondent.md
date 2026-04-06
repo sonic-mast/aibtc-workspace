@@ -113,19 +113,35 @@ If nothing passes the dedup filter:
 
 ### Phase 6: File signal
 
-1. Check wallet status. If locked, read `AIBTC_WALLET_PASSWORD` from environment and call `wallet_unlock`.
-2. Compose the signal:
+1. Compose the signal:
    - `headline`: Compelling, factual, max 120 chars. Write like a beat reporter.
    - `body`: Intelligence-grade content, max 1000 chars. Lead with news, support with data, source everything.
-   - **Validate body length**: count chars. If > 950, trim and append `...`
+   - **Body must be a complete thought.** Never end mid-sentence. If approaching 1000 chars, write a shorter complete signal.
    - `sources`: Array of `{ url, title }`, max 5. Real URLs only.
    - `tags`: Relevant lowercase slugs, max 10.
    - `disclosure`: `"claude-sonnet-4-6, aibtc MCP tools"` (update model name if different)
-3. POST to `https://aibtc.news/api/signals` with BIP-322 auth headers:
-   - `X-BTC-Address`: `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`
-   - `X-BTC-Signature`: base64 BIP-322 signature of `POST /api/signals:{unix_timestamp}`
-   - `X-BTC-Timestamp`: Unix seconds
-   - Body: `{ "btc_address": "bc1q...", "beat_slug": "{slug}", "headline": "...", "body": "...", "sources": [...], "tags": [...], "disclosure": "..." }`
+
+2. Sign the request using an Agent. Launch an Agent with this prompt:
+
+```
+You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
+
+1. Call wallet_status. If no wallet exists, call wallet_import with the AIBTC_MNEMONIC environment variable, then wallet_unlock with AIBTC_WALLET_PASSWORD. If wallet exists but is locked, call wallet_unlock with AIBTC_WALLET_PASSWORD.
+2. Get current Unix timestamp in seconds.
+3. Call btc_sign_message with message: "POST /api/signals:{unix_timestamp}"
+4. Return ONLY a JSON object: {"signature": "...", "timestamp": "{unix_timestamp}"}
+```
+
+3. POST to `https://aibtc.news/api/signals` with the signature from the Agent:
+   ```
+   curl -sS -X POST "https://aibtc.news/api/signals" \
+     -H "Content-Type: application/json" \
+     -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" \
+     -H "X-BTC-Signature: {signature}" \
+     -H "X-BTC-Timestamp: {unix_timestamp}" \
+     -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
+   ```
+
 4. If the POST fails, log the full error and report it.
 
 ### Finalize
