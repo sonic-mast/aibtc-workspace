@@ -79,7 +79,8 @@
       "Bash(PATH=\"/opt/homebrew/bin:$PATH\" CLOUDFLARE_API_TOKEN=\"cfat_pf1sFHUnlQYJ2j3UBW0mrFNTXvdIRbRFVLMRfgzAb977fddf\" CLOUDFLARE_ACCOUNT_ID=\"7a4f8f49f0affd90960dfcaac7ba248b\" npx wrangler deploy)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__aibtc__check_relay_health"
     ]
   }
 }
