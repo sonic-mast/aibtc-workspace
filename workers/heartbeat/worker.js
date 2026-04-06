@@ -68,9 +68,57 @@ export default {
   }
 };
 
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return bytes;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function getCachedKey(env) {
+  const stateWorker = env.STATE_WORKER;
+  const authHeader = { "Authorization": `Bearer ${env.STATE_API_TOKEN}` };
+
+  // Try cache first
+  try {
+    const cached = await stateWorker.fetch("https://state/kv/heartbeat-key", { headers: authHeader });
+    if (cached.ok) {
+      const data = await cached.json();
+      return {
+        privateKey: hexToBytes(data.privateKey),
+        address: data.address,
+        publicKey: hexToBytes(data.publicKey),
+        scriptPubKey: hexToBytes(data.scriptPubKey),
+      };
+    }
+  } catch { /* cache miss, derive fresh */ }
+
+  // Derive from mnemonic (expensive — PBKDF2)
+  const derived = await deriveKey(env.AIBTC_MNEMONIC);
+
+  // Cache for future runs
+  try {
+    await stateWorker.fetch("https://state/kv/heartbeat-key", {
+      method: "PUT",
+      headers: { ...authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        privateKey: bytesToHex(derived.privateKey),
+        address: derived.address,
+        publicKey: bytesToHex(derived.publicKey),
+        scriptPubKey: bytesToHex(derived.scriptPubKey),
+      })
+    });
+  } catch { /* non-fatal if cache write fails */ }
+
+  return derived;
+}
+
 async function doHeartbeat(env) {
-  // 1. Derive key from mnemonic
-  const { privateKey, address, publicKey, scriptPubKey } = await deriveKey(env.AIBTC_MNEMONIC);
+  // 1. Get key material (cached in KV to avoid expensive PBKDF2 on every run)
+  const { privateKey, address, publicKey, scriptPubKey } = await getCachedKey(env);
 
   if (address !== "bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47") {
     throw new Error(`Address mismatch: got ${address}, expected bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`);
