@@ -1,61 +1,35 @@
 ---
-name: Remote migration plan
-description: All tasks moving to remote triggers on Sunday Apr 5 when Max plan resets — includes BFF and bounty setup
+name: Remote migration — completed
+description: Architecture finalized. Heartbeat on Cloudflare Worker, inbox+news on Claude Code cloud trigger.
 type: project
 ---
 
-## Sunday Apr 5 — Migration Day
+## Final Architecture (Apr 6, 2026)
 
-### Step 1: Confirm remote trigger auth works
-- `RemoteTrigger` action: "list" — must not return 401
-- If still 401, Max plan hasn't reset yet — wait
+| Component | Where | Schedule | Cost |
+|---|---|---|---|
+| Heartbeat | Cloudflare Worker (`sonic-mast-heartbeat`) | */15 * * * * | $0 |
+| Inbox + News | Claude Code cloud trigger (`aibtc-combined`) | hourly | ~19% weekly Max budget |
+| Reference refresh | local desktop task | daily | minimal |
+| State API | Cloudflare Worker (`sonic-mast-state`) + KV | always on | $0 |
 
-### Step 2: Migrate existing 4 tasks to remote triggers
-Environment: AIBTC (env_01Kz3r3t8KDerErbcpwBriNk)
+## Key Learnings
 
-| Task | Remote cron | Model |
-|---|---|---|
-| aibtc-pulse | hourly (was 20 min local) | haiku |
-| aibtc-reply-worker | hourly | sonnet |
-| aibtc-news-correspondent | hourly | sonnet |
-| refresh-reference | daily | haiku |
+- Max plan allows only 1 hourly cloud trigger — had to combine all AI tasks into one session
+- Cloud sessions can't use MCP tools directly — spawn Agent sub-tasks for wallet operations
+- `.claude/settings.json` (committed) provides permissions for cloud sessions
+- `.claude/settings.local.json` (gitignored) is for local-only permissions
+- Setup script: `npm install -g @aibtc/mcp-server@1.46.3 && echo '{"mcpServers":...}' > .mcp.json`
+- Heartbeat doesn't need AI — pure crypto worker, runs free on Cloudflare
+- Token optimization: pipe API responses through python to extract only needed fields before Claude sees them
+- Quiet runs cost ~500 tokens. Active runs cost ~15-25K tokens.
 
-Env vars needed in AIBTC environment:
-- AIBTC_WALLET_PASSWORD
-- AIBTC_MNEMONIC (for remote wallet recreation)
-- NETWORK=mainnet
-- BRAVE_API_KEY
-- TWITTER_API_KEY
+## Cloudflare Resources
 
-### Step 3: Verify remote triggers fire clean
-- Check state file after first remote pulse
-- Confirm heartbeat, inbox scan, and news quota check all work
-- Confirm reply worker handles messages
-- Confirm news correspondent files signals
+- State Worker: `sonic-mast-state.brandonmarshall.workers.dev` (KV: `bee217d801e44978a1297c19d10db914`)
+- Heartbeat Worker: `sonic-mast-heartbeat.brandonmarshall.workers.dev` (cron: */15)
+- Account: `7a4f8f49f0affd90960dfcaac7ba248b`
 
-### Step 4: Delete local scheduled tasks
-- Only after remote triggers are confirmed working
+## Repo
 
-### Step 5: Set up BFF Skills Competition automation
-- Reference file already at `reference/bff.army/agents.txt` (auto-refreshed daily)
-- Competition ends April 22 — still 18 days
-- Needs: daily skill builder task (sonnet), PR monitor task (haiku), using GITHUB_TOKEN
-- Old OpenClaw pipeline for reference: bff-daily-builder → bff-pr-monitor → devin review → emergency cutoff
-- Start simple: one task that checks competition status and builds a skill if eligible
-
-### Step 6: Set up Bounty Hunting automation
-- MCP tools ready: bounty_list, bounty_get, bounty_claim
-- Needs: scanner task (haiku) to check for open bounties, builder task (sonnet) to work on them
-- Currently 0 open bounties — scanner would self-skip until new ones appear
-- Old pattern: bounty scan → solution builder → PR review monitor → completion tracker
-
-### Notes from local testing (Apr 4)
-- Pulse works clean on haiku — heartbeat + inbox scan + news quota in one run
-- Reply worker successfully sends replies via free outbox endpoint (NOT x402)
-- News correspondent filed first signal on agent-economy beat
-- All reference files refreshed successfully
-- Sponsor API key (x402 relay) is ALREADY_PROVISIONED but lost — ask AIBTC team to reset or share
-- Wallet password stored in ~/.claude/settings.json env (not in repo)
-- Vibewatch MCP server configured in .mcp.json
-
-**Why remote-first:** Reduces dependency on local machine being online. Hourly pulse acceptable — heartbeat count is vanity at 2,431+ check-ins.
+`https://github.com/sonic-mast/aibtc-workspace`
