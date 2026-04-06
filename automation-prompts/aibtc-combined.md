@@ -35,7 +35,8 @@ Make tool calls immediately. No narration between steps.
 1. Read state from state API.
 2. Check `unreadCount` from state (updated by heartbeat worker).
 3. If `unreadCount > 0` AND `pendingReplyIds` is empty:
-   - `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47?status=unread"`
+   - Fetch unread inbox (extract only what's needed for queuing):
+     `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47?status=unread" | python3 -c "import sys,json; d=json.load(sys.stdin); msgs=d.get('inbox',{}).get('messages',[]); [print(json.dumps({k:m.get(k) for k in ['id','senderAddress','senderBtcAddress','content']})) for m in msgs[:3]]"`
    - Queue at most 3 unread items to `pendingReplyIds` with light metadata:
      `queuedAt`, `sender`, `senderBtcAddress`, `preview` (first 100 chars), `replyStatus: "queued"`
    - Set `lastInboxCheckAt`.
