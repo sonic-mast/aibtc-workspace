@@ -1,0 +1,7 @@
+name = "sonic-mast-heartbeat"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["*/15 * * * *"]

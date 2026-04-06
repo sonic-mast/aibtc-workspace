@@ -1,0 +1,13 @@
+{
+  "name": "sonic-mast-heartbeat",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@scure/bip39": "^2.0.1",
+    "@scure/bip32": "^1.4.0",
+    "@scure/btc-signer": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@noble/curves": "^2.0.1"
+  }
+}
