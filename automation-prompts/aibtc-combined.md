@@ -112,14 +112,123 @@ Beat-specific:
 
 If nothing newsworthy or dedup blocks: skip. Skipping is fine.
 
-### Phase 5: Write state and output
+### Phase 5: Code work (conditional)
+
+Only if `codeWork.status` is not `none` OR (`codeWork.status` is `none` AND there is available capacity this run — i.e., inbox and news finished quickly).
+
+**State machine**: `none → building → awaiting-review → fixing → awaiting-review → submitted → none`
+
+All code work state lives under the `codeWork` key:
+```json
+{
+  "codeWork": {
+    "status": "none",
+    "project": null,
+    "prNumber": null,
+    "prUrl": null,
+    "repo": null,
+    "branch": null,
+    "reviewRound": 0,
+    "lastActionAt": null,
+    "blockedReason": null
+  }
+}
+```
+
+**5a. Status: `none` — Pick work**
+
+First, close any stale open PRs on `sonic-mast/bff-skills`:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/sonic-mast/bff-skills/pulls?state=open" | python3 -c "import sys,json; prs=json.load(sys.stdin); [print(json.dumps({'number':p['number'],'title':p['title'],'created_at':p['created_at']})) for p in prs]"`
+Close any PR older than 48 hours using the GitHub API with a comment explaining it's being superseded.
+
+Then check for open bounties (higher value):
+`curl -s "https://aibtc.com/api/bounty" | python3 -c "import sys,json; d=json.load(sys.stdin); bounties=[b for b in d if b.get('status')=='open']; print(json.dumps({'count':len(bounties),'bounties':[{'id':b['id'],'title':b['title'],'reward':b.get('reward')} for b in bounties[:3]]}))" 2>/dev/null || echo '{"count":0}'`
+
+If bounties exist, pick one. Otherwise, check BFF Skills Competition:
+- Read `reference/bff.army/agents.txt` for current day number and rules.
+- If competition is still running, plan a new WRITE skill. Pick something useful for the AIBTC agent economy — DeFi execution, wallet primitives, identity/signing, payments infrastructure.
+- Check existing PRs on `sonic-mast/bff-skills` to avoid duplicating past work.
+
+If neither bounties nor competition are active, set `codeWork.status` to `none` and skip.
+
+When you have a target: set `status` to `building`, save project details, proceed to 5b.
+
+**5b. Status: `building` — Build and open PR**
+
+For BFF skills:
+1. Clone/update fork: `sonic-mast/bff-skills`
+2. Create branch: `skill/{skill-name}`
+3. Build exactly 3 files under `skills/{skill-name}/`:
+   - `SKILL.md` — nested `metadata:` frontmatter format (see agents.txt for exact format)
+   - `AGENT.md` — YAML frontmatter required (name, skill, description)
+   - `{skill-name}.ts` — Commander.js CLI, strict JSON output, uses AIBTC MCP wallet
+4. Skills must be WRITE skills (execute transactions, not read-only).
+5. Open PR to `BitflowFinance/bff-skills` with title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
+6. Use `PULL_REQUEST_TEMPLATE.md` format for the PR body.
+7. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo`, `branch`.
+
+For bounties: follow bounty-specific submission flow. Same state machine applies.
+
+**5c. Status: `awaiting-review` — Check Devin Review**
+
+Devin Review (`devin-ai-integration[bot]`) automatically reviews PRs within ~20 minutes.
+
+Check for reviews:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
+import sys,json
+reviews = json.load(sys.stdin)
+devin = [r for r in reviews if r.get('user',{}).get('login') == 'devin-ai-integration[bot]']
+if not devin:
+    print(json.dumps({'status': 'pending', 'count': 0}))
+else:
+    latest = devin[-1]
+    print(json.dumps({'status': 'reviewed', 'id': latest['id'], 'body': latest.get('body','')[:500]}))
+"`
+
+- If no Devin review yet AND `lastActionAt` is less than 1 hour ago: stay in `awaiting-review`.
+- If no Devin review after 1 hour: something may be wrong. Set `blockedReason` to `devin-timeout`.
+- If Devin reviewed: check for issues.
+
+Parse Devin findings from review comments:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/comments" | python3 -c "
+import sys,json
+comments = json.load(sys.stdin)
+devin = [c for c in comments if c.get('user',{}).get('login') == 'devin-ai-integration[bot]']
+bugs = [c for c in devin if 'BUG_' in c.get('body','') and not c.get('body','').startswith('✅')]
+analysis = [c for c in devin if 'ANALYSIS_' in c.get('body','')]
+resolved = [c for c in devin if c.get('body','').startswith('✅')]
+print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path','')} for c in bugs[:5]]}))"
+`
+
+- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitted` (PR is ready for human judges).
+- If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`.
+
+**5d. Status: `fixing` — Address Devin feedback**
+
+1. Read the `BUG_` comments in detail. Devin includes `suggestion` code blocks with fixes.
+2. Apply fixes to the skill files on the same branch.
+3. Push commits. Devin will automatically re-review on new commits.
+4. Set `status` back to `awaiting-review`, update `lastActionAt`.
+5. Max 3 review rounds. After round 3, set `status` to `submitted` regardless (diminishing returns — let human judges evaluate).
+
+**5e. Status: `submitted` — Done**
+
+PR is open and reviewed. Nothing to do until next day or until judges act.
+Set `status` to `none` after 24 hours to allow picking new work.
+
+**5f. Status: `blocked`**
+
+Log `blockedReason` and skip. Operator will investigate.
+
+### Phase 6: Write state and output
 
 Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
+Update `codeWork` fields based on Phase 5 actions.
 
 Output exactly one line:
 
-`AIBTC Combined | ok | unread={unreadCount} | queued={pendingCount} | replied={handledCount} | news={filed|skip|cooldown|maxed}`
+`AIBTC Combined | ok | unread={unreadCount} | queued={pendingCount} | replied={handledCount} | news={filed|skip|cooldown|maxed} | code={status}`
 
 ## Rules
 
@@ -130,3 +239,6 @@ Output exactly one line:
 - No stale news (48h max). No truncated signals. Rotate beats.
 - Never drop queued inbox items. Block if sender BTC address missing.
 - Replies are FREE (outbox endpoint). Never use x402 for replies.
+- Code work is lower priority than inbox and news. Skip if running low on time/tokens.
+- One skill or bounty at a time. Finish or abandon before starting another.
+- Max 3 Devin review rounds per PR. After round 3, submit as-is.
