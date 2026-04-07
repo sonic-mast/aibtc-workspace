@@ -237,13 +237,15 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 5. Set `status` back to `awaiting-review`, update `lastActionAt`.
 6. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
-**5e. Status: `submitting` — Open upstream PR**
+**5e. Status: `submitting` — Update fork PR and open upstream PR**
 
-Devin review is done (or max rounds reached). Now submit to the actual competition:
-1. Open PR from `sonic-mast:skill/{skill-name}` to `BitflowFinance/bff-skills` `main`.
-   Same title and body as the fork PR.
-2. Save `upstreamPrNumber` and `upstreamPrUrl` in state.
-3. Set `status` to `submitted`.
+Devin review is done (or max rounds reached). Now finalize and submit:
+1. Update the fork PR (`prNumber` on `sonic-mast/bff-skills`) body to reflect the final state — include what was built, what review findings were addressed, on-chain proof if available, and safety controls. Use PATCH:
+   `curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" "https://api.github.com/repos/{repo}/pulls/{prNumber}" -d '{"body":"..."}'`
+2. Open PR from `sonic-mast:skill/{skill-name}` to `BitflowFinance/bff-skills` `main`.
+   Same title and updated body as the fork PR.
+3. Save `upstreamPrNumber` and `upstreamPrUrl` in state.
+4. Set `status` to `submitted`.
 
 **5f. Status: `submitted` — Done**
 
