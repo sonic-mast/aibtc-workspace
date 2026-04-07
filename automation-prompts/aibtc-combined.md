@@ -204,16 +204,17 @@ resolved = [c for c in devin if c.get('body','').startswith('✅')]
 print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path','')} for c in bugs[:5]]}))"
 `
 
-- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitting` (ready for upstream PR).
-- If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`.
+- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitting` and proceed to 5e now.
+- If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`, and proceed to 5d now (same run).
 
 **5d. Status: `fixing` — Address Devin feedback**
 
-1. Read the `BUG_` comments in detail. Devin includes `suggestion` code blocks with fixes.
-2. Apply fixes to the skill files on the same branch.
-3. Push commits. Devin will automatically re-review on new commits.
-4. Set `status` back to `awaiting-review`, update `lastActionAt`.
-5. Max 3 review rounds. After round 3, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
+1. Clone the fork: `git clone https://sonic-mast:$GITHUB_TOKEN@github.com/{repo}.git` and checkout the branch from state.
+2. Fetch full `BUG_` comments from the PR via GitHub API. Devin includes `suggestion` code blocks with fixes.
+3. Read the affected files from the cloned repo, apply the fixes.
+4. Commit and push to the same branch. Devin will automatically re-review on new commits.
+5. Set `status` back to `awaiting-review`, update `lastActionAt`.
+6. Max 3 review rounds. After round 3, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
 **5e. Status: `submitting` — Open upstream PR**
 
