@@ -199,19 +199,32 @@ else:
 - If no reviews after 1 hour: something may be wrong. Set `blockedReason` to `review-timeout`.
 - If at least one bot reviewed: check for issues.
 
-Parse findings from review comments (both bots):
+Only look at comments from the **latest** review round (Devin re-reviews post new comments on each push). Get the latest review ID, then only check comments from that review:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
+import sys,json
+reviews = json.load(sys.stdin)
+bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bot_reviews = [r for r in reviews if r.get('user',{}).get('login') in bots]
+latest_ids = {}
+for r in bot_reviews:
+    login = r['user']['login']
+    latest_ids[login] = r['id']
+print(json.dumps(latest_ids))
+"`
+
+Then parse findings only from the latest review's comments:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/comments" | python3 -c "
 import sys,json
 comments = json.load(sys.stdin)
 bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
-bot_comments = [c for c in comments if c.get('user',{}).get('login') in bots]
-bugs = [c for c in bot_comments if 'BUG_' in c.get('body','') and not c.get('body','').startswith('✅')]
-analysis = [c for c in bot_comments if 'ANALYSIS_' in c.get('body','') or ('gemini-code-assist' in c.get('user',{}).get('login','') and not c.get('body','').startswith('✅'))]
-resolved = [c for c in bot_comments if c.get('body','').startswith('✅')]
-print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path',''), 'reviewer': c['user']['login']} for c in bugs[:5]]}))"
+latest_ids = {LATEST_IDS_FROM_ABOVE}
+bot_comments = [c for c in comments if c.get('user',{}).get('login') in bots and c.get('pull_request_review_id') in latest_ids.values()]
+bugs = [c for c in bot_comments if 'BUG_' in c.get('body','') and '✅' not in c.get('body','')]
+analysis = [c for c in bot_comments if 'ANALYSIS_' in c.get('body','') or ('gemini-code-assist' in c.get('user',{}).get('login','') and '✅' not in c.get('body',''))]
+print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'body': c['body'][:300], 'path': c.get('path',''), 'reviewer': c['user']['login']} for c in bugs[:5]]}))"
 `
 
-- If 0 unresolved `BUG_` findings from either bot → reviews passed. Set `status` to `submitting` and proceed to 5e now.
+- If 0 `BUG_` findings in the latest review round → reviews passed. Set `status` to `submitting` and proceed to 5e now.
 - If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`, and proceed to 5d now (same run).
 - Treat Gemini comments that flag concrete bugs the same as Devin `BUG_` findings — fix them. Treat style suggestions as optional (like `ANALYSIS_`).
 
