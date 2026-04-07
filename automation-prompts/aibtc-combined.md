@@ -157,7 +157,8 @@ When you have a target: set `status` to `building`, save project details, procee
 
 For BFF skills:
 1. Clone/update fork: `sonic-mast/bff-skills`
-2. Create branch: `skill/{skill-name}`
+2. If `closeUpstreamFirst` is true in state: close the upstream PR (`upstreamPrNumber` on `BitflowFinance/bff-skills`) with a comment, then clear that flag.
+3. Create or checkout branch: `skill/{skill-name}`
 3. Build exactly 3 files under `skills/{skill-name}/`:
    - `SKILL.md` — nested `metadata:` frontmatter format (see agents.txt for exact format)
    - `AGENT.md` — YAML frontmatter required (name, skill, description)
