@@ -131,6 +131,7 @@ All code work state lives under the `codeWork` key:
     "repo": null,
     "branch": null,
     "reviewRound": 0,
+    "externalReviewRound": 0,
     "lastActionAt": null,
     "blockedReason": null
   }
@@ -315,8 +316,9 @@ print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comment
   `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues/{upstreamPrNumber}/comments" | python3 -c "import sys,json; comments=json.load(sys.stdin); [print(f'{c[\"user\"][\"login\"]}: {c[\"body\"][:300]}') for c in comments[-5:]]"`
   Save feedback summary to `blockedReason`, set `status` to `none` so the next run can try a new skill (incorporating the feedback).
 - If `state: open` with new review comments since `lastActionAt` → human reviewers left feedback. Read it and decide:
-  - If changes are requested: set `status` to `fixing`, increment `reviewRound` (this re-enters the fix cycle on the fork branch, then re-push to upstream).
-  - If just questions/clarifications: respond via PR comment.
+  - If changes are requested AND `externalReviewRound < 2`: increment `externalReviewRound`, set `status` to `fixing` (re-enters fix cycle on the fork branch, then re-push to upstream).
+  - If changes are requested AND `externalReviewRound >= 2`: max external rounds reached. Set `blockedReason` to `max-external-reviews` and `status` to `none`. The PR stays open but we stop spending tokens on it — operator can review manually.
+  - If just questions/clarifications: respond via PR comment (does not count as a review round).
 - If `state: open` with no new activity: no action needed. Set `status` to `none` after 48 hours to free up capacity for new work (the PR stays open for judges).
 
 **5g. Status: `blocked`**
