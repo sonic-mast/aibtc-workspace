@@ -159,16 +159,17 @@ For BFF skills:
 1. Clone/update fork: `sonic-mast/bff-skills`
 2. If `closeUpstreamFirst` is true in state: close the upstream PR (`upstreamPrNumber` on `BitflowFinance/bff-skills`) with a comment, then clear that flag.
 3. Create or checkout branch: `skill/{skill-name}`
-3. Build exactly 3 files under `skills/{skill-name}/`:
+4. If the branch already has the skill files (check with `git ls-tree`), skip to step 7 (open PR).
+5. Build exactly 3 files under `skills/{skill-name}/`:
    - `SKILL.md` — nested `metadata:` frontmatter format (see agents.txt for exact format)
    - `AGENT.md` — YAML frontmatter required (name, skill, description)
    - `{skill-name}.ts` — Commander.js CLI, strict JSON output, uses AIBTC MCP wallet
-4. Skills must be WRITE skills (execute transactions, not read-only).
-5. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin Review is only configured on the fork.
+6. Skills must be WRITE skills (execute transactions, not read-only).
+7. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin Review is only configured on the fork.
    Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
    Base branch: `main`. Head branch: `skill/{skill-name}`.
-6. Use `PULL_REQUEST_TEMPLATE.md` format for the PR body.
-7. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
+8. Use `PULL_REQUEST_TEMPLATE.md` format for the PR body.
+9. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
 
