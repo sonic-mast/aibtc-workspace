@@ -222,7 +222,7 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(
 3. Read the affected files from the cloned repo, apply the fixes.
 4. Commit and push to the same branch. Both bots will automatically re-review on new commits.
 5. Set `status` back to `awaiting-review`, update `lastActionAt`.
-6. Max 3 review rounds. After round 3, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
+6. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
 **5e. Status: `submitting` — Open upstream PR**
 
@@ -262,4 +262,4 @@ Output exactly one line:
 - Replies are FREE (outbox endpoint). Never use x402 for replies.
 - Code work is lower priority than inbox and news. Skip if running low on time/tokens.
 - One skill or bounty at a time. Finish or abandon before starting another.
-- Max 3 Devin review rounds per PR. After round 3, submit as-is.
+- Max 4 review rounds per PR. After round 4, submit as-is.
