@@ -173,46 +173,54 @@ For BFF skills:
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
 
-**5c. Status: `awaiting-review` — Check Devin Review**
+**5c. Status: `awaiting-review` — Check automated reviews**
 
-Devin Review (`devin-ai-integration[bot]`) automatically reviews PRs within ~20 minutes.
+Two bots review PRs automatically:
+- **Devin Review** (`devin-ai-integration[bot]`) — posts `BUG_` and `ANALYSIS_` findings as inline PR comments
+- **Gemini Code Assist** (`gemini-code-assist[bot]`) — posts review comments with issue descriptions
 
-Check for reviews:
+Check for reviews from both:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
 import sys,json
 reviews = json.load(sys.stdin)
-devin = [r for r in reviews if r.get('user',{}).get('login') == 'devin-ai-integration[bot]']
-if not devin:
+bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bot_reviews = [r for r in reviews if r.get('user',{}).get('login') in bots]
+if not bot_reviews:
     print(json.dumps({'status': 'pending', 'count': 0}))
 else:
-    latest = devin[-1]
-    print(json.dumps({'status': 'reviewed', 'id': latest['id'], 'body': latest.get('body','')[:500]}))
+    by_bot = {}
+    for r in bot_reviews:
+        login = r['user']['login']
+        by_bot[login] = {'id': r['id'], 'body': r.get('body','')[:300]}
+    print(json.dumps({'status': 'reviewed', 'reviewers': by_bot}))
 "`
 
-- If no Devin review yet AND `lastActionAt` is less than 1 hour ago: stay in `awaiting-review`.
-- If no Devin review after 1 hour: something may be wrong. Set `blockedReason` to `devin-timeout`.
-- If Devin reviewed: check for issues.
+- If no bot reviews yet AND `lastActionAt` is less than 1 hour ago: stay in `awaiting-review`.
+- If no reviews after 1 hour: something may be wrong. Set `blockedReason` to `review-timeout`.
+- If at least one bot reviewed: check for issues.
 
-Parse Devin findings from review comments:
+Parse findings from review comments (both bots):
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/comments" | python3 -c "
 import sys,json
 comments = json.load(sys.stdin)
-devin = [c for c in comments if c.get('user',{}).get('login') == 'devin-ai-integration[bot]']
-bugs = [c for c in devin if 'BUG_' in c.get('body','') and not c.get('body','').startswith('✅')]
-analysis = [c for c in devin if 'ANALYSIS_' in c.get('body','')]
-resolved = [c for c in devin if c.get('body','').startswith('✅')]
-print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path','')} for c in bugs[:5]]}))"
+bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bot_comments = [c for c in comments if c.get('user',{}).get('login') in bots]
+bugs = [c for c in bot_comments if 'BUG_' in c.get('body','') and not c.get('body','').startswith('✅')]
+analysis = [c for c in bot_comments if 'ANALYSIS_' in c.get('body','') or ('gemini-code-assist' in c.get('user',{}).get('login','') and not c.get('body','').startswith('✅'))]
+resolved = [c for c in bot_comments if c.get('body','').startswith('✅')]
+print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path',''), 'reviewer': c['user']['login']} for c in bugs[:5]]}))"
 `
 
-- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitting` and proceed to 5e now.
+- If 0 unresolved `BUG_` findings from either bot → reviews passed. Set `status` to `submitting` and proceed to 5e now.
 - If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`, and proceed to 5d now (same run).
+- Treat Gemini comments that flag concrete bugs the same as Devin `BUG_` findings — fix them. Treat style suggestions as optional (like `ANALYSIS_`).
 
-**5d. Status: `fixing` — Address Devin feedback**
+**5d. Status: `fixing` — Address review feedback**
 
 1. Clone the fork: `git clone https://sonic-mast:$GITHUB_TOKEN@github.com/{repo}.git` and checkout the branch from state.
-2. Fetch full `BUG_` comments from the PR via GitHub API. Devin includes `suggestion` code blocks with fixes.
+2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
-4. Commit and push to the same branch. Devin will automatically re-review on new commits.
+4. Commit and push to the same branch. Both bots will automatically re-review on new commits.
 5. Set `status` back to `awaiting-review`, update `lastActionAt`.
 6. Max 3 review rounds. After round 3, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
