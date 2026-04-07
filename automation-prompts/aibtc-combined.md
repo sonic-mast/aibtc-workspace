@@ -116,7 +116,7 @@ If nothing newsworthy or dedup blocks: skip. Skipping is fine.
 
 Only if `codeWork.status` is not `none` OR (`codeWork.status` is `none` AND there is available capacity this run — i.e., inbox and news finished quickly).
 
-**State machine**: `none → building → awaiting-review → fixing → awaiting-review → submitted → none`
+**State machine**: `none → building → awaiting-review → fixing → awaiting-review → submitting → submitted → none`
 
 All code work state lives under the `codeWork` key:
 ```json
@@ -163,9 +163,11 @@ For BFF skills:
    - `AGENT.md` — YAML frontmatter required (name, skill, description)
    - `{skill-name}.ts` — Commander.js CLI, strict JSON output, uses AIBTC MCP wallet
 4. Skills must be WRITE skills (execute transactions, not read-only).
-5. Open PR to `BitflowFinance/bff-skills` with title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
+5. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin Review is only configured on the fork.
+   Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
+   Base branch: `main`. Head branch: `skill/{skill-name}`.
 6. Use `PULL_REQUEST_TEMPLATE.md` format for the PR body.
-7. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo`, `branch`.
+7. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
 
@@ -200,7 +202,7 @@ resolved = [c for c in devin if c.get('body','').startswith('✅')]
 print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(resolved), 'details': [{'body': c['body'][:200], 'path': c.get('path','')} for c in bugs[:5]]}))"
 `
 
-- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitted` (PR is ready for human judges).
+- If 0 unresolved `BUG_` findings → Devin is satisfied. Set `status` to `submitting` (ready for upstream PR).
 - If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`.
 
 **5d. Status: `fixing` — Address Devin feedback**
@@ -209,14 +211,22 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'resolved': len(
 2. Apply fixes to the skill files on the same branch.
 3. Push commits. Devin will automatically re-review on new commits.
 4. Set `status` back to `awaiting-review`, update `lastActionAt`.
-5. Max 3 review rounds. After round 3, set `status` to `submitted` regardless (diminishing returns — let human judges evaluate).
+5. Max 3 review rounds. After round 3, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
-**5e. Status: `submitted` — Done**
+**5e. Status: `submitting` — Open upstream PR**
 
-PR is open and reviewed. Nothing to do until next day or until judges act.
+Devin review is done (or max rounds reached). Now submit to the actual competition:
+1. Open PR from `sonic-mast:skill/{skill-name}` to `BitflowFinance/bff-skills` `main`.
+   Same title and body as the fork PR.
+2. Save `upstreamPrNumber` and `upstreamPrUrl` in state.
+3. Set `status` to `submitted`.
+
+**5f. Status: `submitted` — Done**
+
+Both PRs are open. Nothing to do until next day or until judges act.
 Set `status` to `none` after 24 hours to allow picking new work.
 
-**5f. Status: `blocked`**
+**5g. Status: `blocked`**
 
 Log `blockedReason` and skip. Operator will investigate.
 
