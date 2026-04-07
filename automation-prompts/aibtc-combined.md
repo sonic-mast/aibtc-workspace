@@ -126,6 +126,8 @@ All code work state lives under the `codeWork` key:
     "project": null,
     "prNumber": null,
     "prUrl": null,
+    "upstreamPrNumber": null,
+    "upstreamPrUrl": null,
     "repo": null,
     "branch": null,
     "reviewRound": 0,
@@ -133,6 +135,50 @@ All code work state lives under the `codeWork` key:
     "blockedReason": null
   }
 }
+```
+
+#### CRITICAL: Code quality rules
+
+These rules exist because previous submissions were rejected. Follow them exactly:
+
+1. **NEVER fabricate contract addresses, API URLs, or function signatures.** If you don't know the real contract address, look it up via the Hiro API (`https://api.hiro.so/extended/v1/contract/{address}.{name}`) or the protocol's SDK/docs. If you can't verify it exists on mainnet, don't use it.
+2. **Use protocol SDKs when available** instead of hardcoding contract calls. For Bitflow: `@bitflowlabs/core-sdk`. For other protocols: check their npm packages first.
+3. **Bitflow API base URL**: `https://bff.bitflowapis.finance` (NOT `api.bitflowapis.finance`). Pool endpoints use versioned paths: `/api/app/v1/pools`, `/api/quotes/v1/pools`.
+4. **All write operations MUST require `--confirm` flag.** Without `--confirm`, return `status: "blocked"` with the payload preview. This prevents accidental execution.
+5. **All MCP payloads MUST include `postConditionMode: "deny"`** and post-conditions for EVERY token transferred (STX and fungible tokens). Post-conditions without deny mode are advisory only.
+6. **Every safety claim in AGENT.md must be enforced in code.** If AGENT.md says "minimum reserve of 500,000 uSTX" then the code must check it. Doc-only safety claims are scored as missing.
+7. **Add `AbortSignal.timeout(10_000)` to all `fetch()` calls.** No bare fetch.
+8. **One skill per PR.** Never include multiple skill directories. One directory = three files = one PR.
+9. **Sync fork before branching.** Always sync `sonic-mast/bff-skills` main with `BitflowFinance/bff-skills` main before creating a new branch, otherwise old files from closed PRs leak into the diff.
+10. **Reference existing skills as patterns.** Before building, read 1-2 existing skills from the upstream repo (e.g., `skills/dca/dca.ts`) to understand the correct patterns, SDK usage, and output format.
+11. **Commit message format**: `feat({skill-name}): add {skill-name} skill`
+12. **Include submission history** in PR body — mention any previous PRs (PR #224, #225 were closed for this agent).
+
+#### PR body format
+
+Use the `.github/PULL_REQUEST_TEMPLATE.md` from the repo:
+```
+## Skill Submission
+**Skill name:** {name}
+**Category:** {Trading / Yield / Infrastructure / Signals}
+**HODLMM integration?** {Yes / No}
+### What it does
+{2-3 sentences}
+### On-chain proof
+{mainnet tx hash link — REQUIRED for write skills}
+### Registry compatibility checklist
+- [x] SKILL.md uses metadata: nested frontmatter
+- [x] AGENT.md starts with YAML frontmatter
+- [x] tags/requires are comma-separated quoted strings
+- [x] user-invocable is "false"
+- [x] entry path is repo-root-relative (no skills/ prefix)
+- [x] metadata.author is "sonic-mast"
+- [x] All commands output JSON to stdout
+- [x] Error output uses { "error": "..." } format
+### Smoke test results
+{doctor and run output in <details> blocks}
+### Security notes
+{write operations, fund limits, confirmation gates}
 ```
 
 **5a. Status: `none` — Pick work**
@@ -147,7 +193,9 @@ Then check for open bounties (higher value):
 If bounties exist, pick one. Otherwise, check BFF Skills Competition:
 - Read `reference/bff.army/agents.txt` for current day number and rules.
 - If competition is still running, plan a new WRITE skill. Pick something useful for the AIBTC agent economy — DeFi execution, wallet primitives, identity/signing, payments infrastructure.
-- Check existing PRs on `sonic-mast/bff-skills` to avoid duplicating past work.
+- **Before choosing a skill idea**: read 1-2 existing skills from upstream to understand the codebase patterns. At minimum read the DCA skill (`skills/dca/dca.ts`) since it shows correct Bitflow SDK usage.
+- Check existing PRs (open and closed) on `sonic-mast/bff-skills` to avoid duplicating past work.
+- Check existing skills on upstream to avoid building something that already exists.
 
 If neither bounties nor competition are active, set `codeWork.status` to `none` and skip.
 
@@ -156,26 +204,28 @@ When you have a target: set `status` to `building`, save project details, procee
 **5b. Status: `building` — Build and open PR**
 
 For BFF skills:
-1. Clone/update fork: `sonic-mast/bff-skills`
-2. If `closeUpstreamFirst` is true in state: close the upstream PR (`upstreamPrNumber` on `BitflowFinance/bff-skills`) with a comment, then clear that flag.
-3. Create or checkout branch: `skill/{skill-name}`
-4. If the branch already has the skill files (check with `git ls-tree`), skip to step 7 (open PR).
-5. Build exactly 3 files under `skills/{skill-name}/`:
-   - `SKILL.md` — nested `metadata:` frontmatter format (see agents.txt for exact format)
-   - `AGENT.md` — YAML frontmatter required (name, skill, description)
-   - `{skill-name}.ts` — Commander.js CLI, strict JSON output, uses AIBTC MCP wallet
-6. Skills must be WRITE skills (execute transactions, not read-only).
-7. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin Review is only configured on the fork.
+1. Sync fork main with upstream: `git clone`, `git remote add upstream https://github.com/BitflowFinance/bff-skills.git`, `git fetch upstream`, `git reset --hard upstream/main`, `git push origin main --force`.
+2. Create branch: `skill/{skill-name}` from the freshly synced main.
+3. Read 1-2 existing skills from the repo to use as reference for patterns, output format, and SDK usage.
+4. Build exactly 3 files under `skills/{skill-name}/` — NO other files:
+   - `SKILL.md` — nested `metadata:` frontmatter format (see `reference/bff.army/agents.txt` for exact format)
+   - `AGENT.md` — YAML frontmatter required (name, skill, description). Every safety claim here must be enforced in the .ts file.
+   - `{skill-name}.ts` — Commander.js CLI, strict JSON output, uses AIBTC MCP wallet. Must include `--confirm` flag on write operations.
+5. Skills must be WRITE skills (execute transactions, not read-only).
+6. **Verify all contract addresses exist on mainnet** before committing: `curl -s "https://api.hiro.so/extended/v1/contract/{address}.{name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('EXISTS' if 'tx_id' in d else 'NOT FOUND:', d.get('error',d.get('tx_id',''))[:80])"`
+7. Run the skill's `doctor` command to verify it works.
+8. Commit: `git commit -m "feat({skill-name}): add {skill-name} skill"`
+9. Push and open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
    Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
    Base branch: `main`. Head branch: `skill/{skill-name}`.
-8. Use `PULL_REQUEST_TEMPLATE.md` format for the PR body.
-9. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
+10. Use the PR body format above. Include submission history (Sonic Mast previous PRs: #224, #225 closed).
+11. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
 
 **5c. Status: `awaiting-review` — Check automated reviews**
 
-Two bots review PRs automatically:
+Two bots review PRs on the fork automatically:
 - **Devin Review** (`devin-ai-integration[bot]`) — posts `BUG_` and `ANALYSIS_` findings as inline PR comments
 - **Gemini Code Assist** (`gemini-code-assist[bot]`) — posts review comments with issue descriptions
 
@@ -199,7 +249,7 @@ else:
 - If no reviews after 1 hour: something may be wrong. Set `blockedReason` to `review-timeout`.
 - If at least one bot reviewed: check for issues.
 
-Only look at comments from the **latest** review round (Devin re-reviews post new comments on each push). Get the latest review ID, then only check comments from that review:
+Only look at comments from the **latest** review round (Devin re-reviews post new comments on each push). Get the latest review ID per bot, then only check comments from those reviews:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
 import sys,json
 reviews = json.load(sys.stdin)
@@ -233,24 +283,41 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 1. Clone the fork: `git clone https://sonic-mast:$GITHUB_TOKEN@github.com/{repo}.git` and checkout the branch from state.
 2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
-4. Commit and push to the same branch. Both bots will automatically re-review on new commits.
-5. Set `status` back to `awaiting-review`, update `lastActionAt`.
-6. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
+4. **Re-verify contract addresses** if any were flagged. Do not fix a fabricated address with another fabricated address.
+5. Commit and push to the same branch. Both bots will automatically re-review on new commits.
+6. Set `status` back to `awaiting-review`, update `lastActionAt`.
+7. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
 **5e. Status: `submitting` — Update fork PR and open upstream PR**
 
-Devin review is done (or max rounds reached). Now finalize and submit:
+Devin/Gemini review is done (or max rounds reached). Now finalize and submit:
 1. Update the fork PR (`prNumber` on `sonic-mast/bff-skills`) body to reflect the final state — include what was built, what review findings were addressed, on-chain proof if available, and safety controls. Use PATCH:
    `curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" "https://api.github.com/repos/{repo}/pulls/{prNumber}" -d '{"body":"..."}'`
-2. Open PR from `sonic-mast:skill/{skill-name}` to `BitflowFinance/bff-skills` `main`.
+2. **Verify the PR only contains files under `skills/{skill-name}/`** — no other skill directories, no extra files:
+   `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/files" | python3 -c "import sys,json; files=json.load(sys.stdin); [print(f['filename']) for f in files]"`
+   If other files are present, the fork main was not synced properly. Set `blockedReason` to `dirty-diff` and stop.
+3. Open PR from `sonic-mast:skill/{skill-name}` to `BitflowFinance/bff-skills` `main`.
    Same title and updated body as the fork PR.
-3. Save `upstreamPrNumber` and `upstreamPrUrl` in state.
-4. Set `status` to `submitted`.
+4. Save `upstreamPrNumber` and `upstreamPrUrl` in state.
+5. Set `status` to `submitted`.
 
-**5f. Status: `submitted` — Done**
+**5f. Status: `submitted` — Monitor upstream PR**
 
-Both PRs are open. Nothing to do until next day or until judges act.
-Set `status` to `none` after 24 hours to allow picking new work.
+Both PRs are open. Check the upstream PR status each run:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/pulls/{upstreamPrNumber}" | python3 -c "
+import sys,json
+pr = json.load(sys.stdin)
+print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comments': pr.get('comments',0), 'review_comments': pr.get('review_comments',0)}))
+"`
+
+- If `merged: true` → skill was accepted! Set `status` to `none`. File a news signal on the `agent-skills` beat if eligible.
+- If `state: closed` and `merged: false` → rejected. Check PR comments for feedback:
+  `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues/{upstreamPrNumber}/comments" | python3 -c "import sys,json; comments=json.load(sys.stdin); [print(f'{c[\"user\"][\"login\"]}: {c[\"body\"][:300]}') for c in comments[-5:]]"`
+  Save feedback summary to `blockedReason`, set `status` to `none` so the next run can try a new skill (incorporating the feedback).
+- If `state: open` with new review comments since `lastActionAt` → human reviewers left feedback. Read it and decide:
+  - If changes are requested: set `status` to `fixing`, increment `reviewRound` (this re-enters the fix cycle on the fork branch, then re-push to upstream).
+  - If just questions/clarifications: respond via PR comment.
+- If `state: open` with no new activity: no action needed. Set `status` to `none` after 48 hours to free up capacity for new work (the PR stays open for judges).
 
 **5g. Status: `blocked`**
 
@@ -276,5 +343,7 @@ Output exactly one line:
 - Never drop queued inbox items. Block if sender BTC address missing.
 - Replies are FREE (outbox endpoint). Never use x402 for replies.
 - Code work is lower priority than inbox and news. Skip if running low on time/tokens.
-- One skill or bounty at a time. Finish or abandon before starting another.
+- One skill per PR. One PR at a time. Finish or abandon before starting another.
 - Max 4 review rounds per PR. After round 4, submit as-is.
+- Never fabricate contract addresses. Verify everything on-chain before using it.
+- Sync fork main with upstream before every new branch.
