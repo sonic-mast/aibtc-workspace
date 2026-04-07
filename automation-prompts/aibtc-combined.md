@@ -84,21 +84,26 @@ Choose which beat to file on. Rotate across runs.
 This gives you one compact JSON line per signal with just beat, headline, timestamp, and status. Do NOT read full signal bodies for dedup.
 
 **4c. Research** — pick 2-3 sources max:
+- **Vibewatch MCP** (preferred for sentiment, community signals, and market context):
+  - `get_daily_insights(days=3)` — highlights/lowlights with source citations. Best for spotting newsworthy patterns.
+  - `get_sentiment_overview(days=7)` — aggregate sentiment score, per-source breakdown, message volume trends.
+  - `get_market_context(days=30)` — Fear & Greed Index, tracked token data, sentiment-vs-market comparison.
+  - `search_messages(keyword="...", source="...", limit=10)` — search community messages across Discord, Telegram, X, GitHub, forum. Filter by sentiment, audience, date range.
+  - `get_reports(limit=1)` — latest weekly report with AI summary, notable mentions, week-over-week changes.
 - **Brave Search**: `WebSearch` tool, max 2 queries ($5/month budget)
 - **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?query={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
-- **Vibewatch**: `curl -s "https://api.vibewatch.io/api/sentiment/overview?days=3" -H "Authorization: $VIBEWATCH_TOKEN"` or MCP tools if available
 - **Stacks Forum** (governance beat — extract titles only):
   `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
 - **AIBTC Activity** (extract summary only):
   `curl -s "https://aibtc.com/api/activity" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
 
 Beat-specific:
-- **Bitcoin Macro**: Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo), Visser Labs RSS (`https://visserlabs.substack.com/feed`), Brave Search. Only file if it connects to Bitcoin-native AI economy.
-- **Deal Flow**: Bounties, classifieds, contracts. Twitter + network activity.
-- **Agent Skills**: Skills releases, MCP updates. Network activity + Brave Search.
-- **Agent Economy**: Registrations, x402 payments, reputation. Network activity + Vibewatch.
-- **Infrastructure**: MCP server updates, relay health. Brave Search + network activity.
-- **Governance**: SIP proposals, WG call recaps. Stacks Forum + Brave Search.
+- **Bitcoin Macro**: Vibewatch `get_market_context` + `get_daily_insights` for sentiment shifts. Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo). Visser Labs RSS (`https://visserlabs.substack.com/feed`). Brave Search. Only file if it connects to Bitcoin-native AI economy.
+- **Deal Flow**: Bounties, classifieds, contracts. Vibewatch `search_messages(keyword="bounty")` + Twitter + network activity.
+- **Agent Skills**: Skills releases, MCP updates. Vibewatch `search_messages(keyword="skill", source="github")` + network activity + Brave Search.
+- **Agent Economy**: Registrations, x402 payments, reputation. Vibewatch `get_sentiment_overview` + `search_messages(audience_tag="trading")` + network activity. Vibewatch is the primary source for this beat.
+- **Infrastructure**: MCP server updates, relay health. Vibewatch `search_messages(audience_tag="engineering")` + Brave Search + network activity.
+- **Governance**: SIP proposals, WG call recaps. Stacks Forum + Vibewatch `search_messages(source="forum")` + Brave Search.
 
 **4d. Dedup filter**: Same headline/topic as last 15 signals → skip. Filed within 3 hours on same beat → skip.
 
