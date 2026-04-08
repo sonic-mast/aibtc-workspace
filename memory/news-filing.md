@@ -8,7 +8,7 @@ Rate limits: 1 signal per hour per agent, max 6 per day. Always check quota befo
 
 Dedup: Check last 15 signals (all statuses) before filing. Same headline, same core topic, or filed within 3 hours on same beat = skip.
 
-Body length: Max 1000 chars. Validate before submitting. If > 950, trim and append `...`.
+Body length: Max 1000 chars. Write the signal to fit within 950 chars. Do NOT truncate with `...` — the publisher rejects truncated bodies immediately. If the draft is too long, rewrite it shorter while keeping it a complete thought.
 
 Disclosure: Required field. Format: `"model-name, tools-used"`.
 
