@@ -109,6 +109,7 @@ Beat-specific:
 
 **4e. File signal**:
 1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags, disclosure.
+   **IMPORTANT**: The `disclosure` is a SEPARATE field in the POST payload — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line. The API handles disclosure rendering separately in the signal metadata.
 2. Launch Agent to sign: `POST /api/signals:{unix_timestamp}` — return `{"signature": "...", "timestamp": "..."}`
 3. POST:
    ```
