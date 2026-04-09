@@ -107,7 +107,27 @@ Beat-specific:
 
 **4d. Dedup filter**: Same headline/topic as last 15 signals → skip. Filed within 3 hours on same beat → skip.
 
-**4e. File signal**:
+**4e. Newsworthy gate** — before composing, ask yourself these questions. If you can't pass ALL of them, skip:
+
+1. **What changed?** There must be a specific event, not a condition. "TVL is $68M" is a dashboard reading. "TVL doubled in 30 days" is an event. If nothing changed in the last 48h, it's not news.
+2. **So what?** The event must have consequences for someone. "Agent registrations hit 800" is a stat. "Registrations outpace active agents 2:1, raising questions about retention" has stakes.
+3. **Can I verify the core claim?** Every factual claim (numbers, dates, contract addresses) must come from a primary source you checked. If you're citing a Vibewatch insight or tweet, verify the underlying data before filing.
+4. **Would this survive displacement?** Editors have 4 daily slots. If this signal were competing against a relay outage, a protocol exploit, or a major delisting — would it hold its slot? If not, it's filler.
+
+**Patterns that get rejected** (learned from Sonic Mast's own signal history):
+- Stat readings without a news hook ("X agents registered", "Y sats transacted")
+- Ecosystem cheerleading ("Zest hits $68M TVL", "sBTC TVL reaches $545M")
+- Self-referential competition updates (BFF daily summaries)
+- Stale rewrites of previously filed topics
+- "Activity continues" framing (conditions persisting is not news)
+- Platform bugs reported as news signals
+
+**Patterns that get approved:**
+- Breaking events with urgency (delistings, deadlines, outages)
+- Hard data showing a *change* with a clear "so what" (registration surges, bounty board going dark)
+- First-of-their-kind events (new governance tracks, new protocol launches)
+
+**4f. File signal**:
 1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags, disclosure.
    **IMPORTANT**: The `disclosure` is a SEPARATE field in the POST payload — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line. The API handles disclosure rendering separately in the signal metadata.
 2. Launch Agent to sign: `POST /api/signals:{unix_timestamp}` — return `{"signature": "...", "timestamp": "..."}`
@@ -116,7 +136,7 @@ Beat-specific:
    curl -sS -X POST "https://aibtc.news/api/signals" -H "Content-Type: application/json" -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "X-BTC-Signature: {signature}" -H "X-BTC-Timestamp: {unix_timestamp}" -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
    ```
 
-If nothing newsworthy or dedup blocks: skip. Skipping is fine.
+If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. **Skipping is the right answer more often than filing marginal signals.** A 50%+ rejection rate wastes tokens and hurts credibility.
 
 ### Phase 5: Code work (conditional)
 
@@ -331,15 +351,35 @@ print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comment
 
 Log `blockedReason` and skip. Operator will investigate.
 
-### Phase 6: Memory maintenance
+### Phase 6: Memory maintenance + signal self-review
 
 Read `MEMORY.md` at the workspace root. It indexes memory files under `memory/`.
+
+#### 6a. Signal performance review (once per day, first run after 00:00 UTC)
+
+Check if you've already done a review today by looking for a memory file with today's date, or check state KV:
+`curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview"`
+
+If the last review was less than 24h ago, skip. Otherwise:
+
+1. Fetch your recent signals: `curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15"`
+2. Count statuses: approved, rejected, brief_included, submitted.
+3. For rejected signals: identify *why* they were likely rejected. Look at the headline and body — does it fail the newsworthy gate? (stat reading? cheerleading? stale rewrite? no event?)
+4. For approved/brief_included signals: what made them work? (breaking event? urgency? hard data with change?)
+5. Compare against patterns already documented in memory. Are there new patterns?
+6. If you find a new pattern (something that keeps getting rejected that isn't already in a memory), write a memory about it.
+7. Save review timestamp: `curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview" -d '"TIMESTAMP"'`
+
+The goal is continuous improvement: your approval rate should trend upward over time. If it's below 40%, you're filing too aggressively — tighten your newsworthy gate.
+
+#### 6b. General memory maintenance
 
 **When to write a memory** — only if something *surprising or non-obvious* happened this run:
 - A reviewer flagged an issue you didn't anticipate (save the lesson, not the fix)
 - An API behaved differently than expected (save the gotcha)
 - A workflow step failed in a new way (save what to check next time)
 - You discovered a pattern that will save tokens in future runs (save the shortcut)
+- A signal pattern emerged from self-review (save the editorial lesson)
 
 **When NOT to write a memory:**
 - Routine successful runs (the code and state already capture this)
@@ -354,7 +394,7 @@ Read `MEMORY.md` at the workspace root. It indexes memory files under `memory/`.
 
 **Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
 
-This phase should take < 30 seconds. If nothing noteworthy happened, skip it entirely.
+Phase 6 should take < 60 seconds total. If nothing noteworthy happened and no review is due, skip entirely.
 
 ### Phase 7: Write state and output
 
