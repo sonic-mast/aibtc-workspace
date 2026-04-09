@@ -94,8 +94,8 @@ This gives you one compact JSON line per signal with just beat, headline, timest
 - **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?query={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
 - **Stacks Forum** (governance beat — extract titles only):
   `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
-- **AIBTC Activity** (extract summary only):
-  `curl -s "https://aibtc.com/api/activity" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
+- **AIBTC Activity** (requires `btcAddress` param — without it returns zeros):
+  `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
 
 Beat-specific:
 - **Bitcoin Macro**: Vibewatch `get_market_context` + `get_daily_insights` for sentiment shifts. Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo). Visser Labs RSS (`https://visserlabs.substack.com/feed`). Brave Search. Only file if it connects to Bitcoin-native AI economy.
