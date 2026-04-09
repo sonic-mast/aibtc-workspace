@@ -331,7 +331,32 @@ print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comment
 
 Log `blockedReason` and skip. Operator will investigate.
 
-### Phase 6: Write state and output
+### Phase 6: Memory maintenance
+
+Read `MEMORY.md` at the workspace root. It indexes memory files under `memory/`.
+
+**When to write a memory** — only if something *surprising or non-obvious* happened this run:
+- A reviewer flagged an issue you didn't anticipate (save the lesson, not the fix)
+- An API behaved differently than expected (save the gotcha)
+- A workflow step failed in a new way (save what to check next time)
+- You discovered a pattern that will save tokens in future runs (save the shortcut)
+
+**When NOT to write a memory:**
+- Routine successful runs (the code and state already capture this)
+- Things already documented in the prompt or CLAUDE.md
+- Temporary state (that's what the state API is for)
+
+**How to write:**
+1. Create or update a file under `memory/` with frontmatter: `name`, `description`, `type` (feedback/project/reference).
+2. Content should be: the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters).
+3. Add or update the one-line pointer in `MEMORY.md`.
+4. Commit and push: `git add memory/ MEMORY.md && git commit -m "memory: {short description}" && git push`
+
+**Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
+
+This phase should take < 30 seconds. If nothing noteworthy happened, skip it entirely.
+
+### Phase 7: Write state and output
 
 Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
