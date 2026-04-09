@@ -4,35 +4,39 @@ Read `SOUL.md` first. It defines who you are.
 
 ## Architecture
 
-Scanner/worker split optimized for token usage:
+Single combined loop, one hourly trigger:
 
 | Task | Model | Schedule | Purpose |
 |---|---|---|---|
-| `aibtc-pulse` | haiku | every 20 min | Heartbeat + inbox scan + news quota check |
-| `aibtc-reply-worker` | sonnet | every 30 min | Compose + send inbox replies (self-skips if empty) |
-| `aibtc-news-correspondent` | sonnet | hourly | Research + file signals (self-skips if not eligible) |
-| `refresh-reference` | haiku | daily 8:17 AM | Refresh llms.txt reference files |
+| `aibtc-combined` | sonnet | hourly (:08) | Heartbeat, inbox, news, code work, memory |
+| Cloudflare Worker | — | every 20 min | Heartbeat beacon to state API |
 
-Pulse gates everything. Workers self-skip when no work is flagged.
+The combined prompt (`automation-prompts/aibtc-combined.md`) runs all phases sequentially. Each phase self-skips when there's no work.
 
 ## State
 
 Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state` (Cloudflare Worker + KV)
 
-Pulse writes `unreadCount`, `pendingReplyIds`, `newsEligible`. Workers read these.
+- **Read**: `GET /state` with `Authorization: Bearer $STATE_API_TOKEN`
+- **Write**: `PUT /state` (full replace) or `PATCH /state` (merge)
+- **KV**: `GET/PUT /kv/:key`, `GET /keys`
 
-Local backup: `automation-state/aibtc-core.json` (may be stale — the API is canonical).
+State includes: heartbeat timestamps, inbox queue, news status/quotas, and the full `codeWork` state machine.
 
 ## Prompt files
 
-All task prompts live in `automation-prompts/`. Each scheduled task reads SOUL.md + its prompt file.
+All task prompts live in `automation-prompts/`. The combined task reads SOUL.md + CLAUDE.md + MEMORY.md + its prompt file.
+
+## Memory
+
+`MEMORY.md` indexes memory files under `memory/`. The combined prompt includes a memory maintenance phase — only write memories when something surprising or non-obvious happens. Keep under 20 entries.
 
 ## Platform Reference
 
 - `reference/aibtc.com/llms.txt` — AIBTC platform API
 - `reference/aibtc.com/llms-full.txt` — AIBTC extended docs
 - `reference/aibtc.news/llms.txt` — aibtc.news API (signals, beats, correspondents)
-- `reference/bff.army/agents.txt` — BFF skills competition (future use)
+- `reference/bff.army/agents.txt` — BFF skills competition rules and format
 
 ## Identity
 
@@ -51,14 +55,15 @@ All task prompts live in `automation-prompts/`. Each scheduled task reads SOUL.m
 | `AIBTC_WALLET_PASSWORD` | Unlock encrypted wallet |
 | `AIBTC_MNEMONIC` | Recreate wallet in remote environments |
 | `NETWORK` | Stacks network (mainnet) |
-| `GITHUB_TOKEN` | Shelly's GitHub account (classic PAT) |
+| `GITHUB_TOKEN` | Sonic Mast's GitHub account (classic PAT) |
+| `STATE_API_TOKEN` | Cloudflare Worker KV auth |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers API |
 | `TWITTER_API_KEY` | twitterapi.io access |
 | `BRAVE_API_KEY` | Brave Search API (budget: $5/month) |
 
 ## MCP Servers
 
-- `aibtc` — AIBTC wallet, signing, DeFi, identity, news tools (pinned @1.46.3)
+- `aibtc` — AIBTC wallet, signing, DeFi, identity, news tools
 - `vibewatch` — Agent communication pattern analysis (sentiment, volume, engagement)
 
 ## Behavior Rules
@@ -69,3 +74,6 @@ All task prompts live in `automation-prompts/`. Each scheduled task reads SOUL.m
 - Check before doing — early exit saves tokens.
 - Keep JSON valid: double-quoted keys, no comments, no trailing commas.
 - Remote-first: all tasks designed for remote execution via mnemonic env var.
+- Never fabricate contract addresses or API URLs. Verify on-chain first.
+- News signal disclosure goes ONLY in the `disclosure` field, never in body text.
+- Sync fork main with upstream before every new branch.
