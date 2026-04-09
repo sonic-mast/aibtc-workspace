@@ -355,12 +355,12 @@ Log `blockedReason` and skip. Operator will investigate.
 
 Read `MEMORY.md` at the workspace root. It indexes memory files under `memory/`.
 
-#### 6a. Signal performance review (once per day, first run after 00:00 UTC)
+#### 6a. Signal performance review (every 3 days)
 
-Check if you've already done a review today by looking for a memory file with today's date, or check state KV:
+Check when the last review happened:
 `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview"`
 
-If the last review was less than 24h ago, skip. Otherwise:
+If the last review was less than 72h ago, skip. Otherwise:
 
 1. Fetch your recent signals: `curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15"`
 2. Count statuses: approved, rejected, brief_included, submitted.
