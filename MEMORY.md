@@ -9,3 +9,4 @@
 - [Remote migration](memory/remote-migration.md) — All tasks moving to remote triggers Sunday Apr 5, pulse goes hourly
 - [Inbox x402 gotcha](memory/inbox-x402-gotcha.md) — Replies and mark-read are FREE, never use x402 for them
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — Cloud tasks can't use MCP directly, spawn Agent sub-task for wallet ops
+- [Signal approval patterns](memory/signal-approval-patterns.md) — 21% approval rate; BFF competition updates keep leaking through; deadline+consequence formula works
