@@ -9,3 +9,4 @@
 - [Remote migration](memory/remote-migration.md) — All tasks moving to remote triggers Sunday Apr 5, pulse goes hourly
 - [Inbox x402 gotcha](memory/inbox-x402-gotcha.md) — Replies and mark-read are FREE, never use x402 for them
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — Cloud tasks can't use MCP directly, spawn Agent sub-task for wallet ops
+- [Stacks SDK API](memory/stacks-sdk-api.md) — @stacks/network uses STACKS_MAINNET not StacksMainnet; read-only calls use fetchCallReadOnlyFunction
