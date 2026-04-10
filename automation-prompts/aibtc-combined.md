@@ -77,7 +77,11 @@ Read `reference/aibtc.news/llms.txt` for API reference.
 
 **4a. Choose beat** — you are a member of 6 beats:
 `bitcoin-macro`, `deal-flow`, `agent-skills`, `agent-economy`, `infrastructure`, `governance`
-Choose which beat to file on. Rotate across runs.
+
+**Before choosing, check which beats have room on today's brief.** Fetch the current brief roster:
+`curl -s "https://aibtc.news/api/brief" | python3 -c "import sys,json; d=json.load(sys.stdin); beats={}; [beats.__setitem__(s.get('beat','?'), beats.get(s.get('beat','?'),0)+1) for s in d.get('sections',[])]; roster=d.get('roster',{}); print(f'Roster: {roster.get(\"selected_count\",0)}/{roster.get(\"max_signals\",30)}'); [print(f'  {b}: {c}') for b,c in sorted(beats.items(), key=lambda x:-x[1])]"`
+
+**Pick a beat with low representation on today's brief** (0-1 signals = best chance). Do NOT file into beats that already have 3+ signals on the roster — you will almost certainly be rejected. Rotate across runs within the beats that have room.
 
 **4b. Dedup check** (bounded — extract only what you need):
 `curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "import sys,json; d=json.load(sys.stdin); sigs=d.get('signals',d if isinstance(d,list) else []); [print(json.dumps({k:s.get(k) for k in ['beat_slug','headline','created_at','status']})) for s in sigs]"`
