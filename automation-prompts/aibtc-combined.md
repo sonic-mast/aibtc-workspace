@@ -400,11 +400,20 @@ The goal is continuous improvement: your approval rate should trend upward over 
 
 Phase 6 should take < 60 seconds total. If nothing noteworthy happened and no review is due, skip entirely.
 
-### Phase 7: Write state and output
+### Phase 7: Write state, log run, and output
 
 Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
 Update `codeWork` fields based on Phase 5 actions.
+
+**Run log:** POST a JSON summary to the append endpoint. Only include fields relevant to this run — omit nulls and empty values. Keep each entry under 500 chars.
+
+```bash
+curl -sf -X POST "https://sonic-mast-state.brandonmarshall.workers.dev/kv/runlog-$(date -u +%Y-%m-%d)/append" \
+  -H "Authorization: Bearer $STATE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ts":"...","news":"filed|skip|cooldown|maxed","beat":"...","headline":"...","signalFeedback":"approved|rejected|pending","rejectionReason":"...","code":"status","codeDetail":"...","error":"...","notable":"free text for anything unusual"}'
+```
 
 Output exactly one line:
 
