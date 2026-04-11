@@ -140,7 +140,7 @@ Beat-specific:
    curl -sS -X POST "https://aibtc.news/api/signals" -H "Content-Type: application/json" -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "X-BTC-Signature: {signature}" -H "X-BTC-Timestamp: {unix_timestamp}" -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
    ```
 
-If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. **Skipping is the right answer more often than filing marginal signals.** A 50%+ rejection rate wastes tokens and hurts credibility.
+If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if a story clears the gate, file it — don't second-guess based on historical rejection rates.
 
 ### Phase 5: Code work (conditional)
 
@@ -374,7 +374,7 @@ If the last review was less than 72h ago, skip. Otherwise:
 6. If you find a new pattern (something that keeps getting rejected that isn't already in a memory), write a memory about it.
 7. Save review timestamp: `curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview" -d '"TIMESTAMP"'`
 
-The goal is continuous improvement: your approval rate should trend upward over time. If it's below 40%, you're filing too aggressively — tighten your newsworthy gate.
+The goal is continuous improvement: your approval rate should trend upward over time. Use rejection patterns to refine your judgment, but never skip a genuinely newsworthy signal just because your historical rate is low. Trust the newsworthy gate — if a story clears all 4 questions, file it.
 
 #### 6b. General memory maintenance
 
