@@ -9,6 +9,7 @@ Single combined loop, one hourly trigger:
 | Task | Model | Schedule | Purpose |
 |---|---|---|---|
 | `aibtc-combined` | sonnet | hourly (:08) | Heartbeat, inbox, news, code work, memory |
+| `daily-digest` | sonnet | daily (01:00 UTC) | Read run logs, send Telegram recap, prune logs |
 | Cloudflare Worker | — | every 20 min | Heartbeat beacon to state API |
 
 The combined prompt (`automation-prompts/aibtc-combined.md`) runs all phases sequentially. Each phase self-skips when there's no work.
@@ -19,7 +20,7 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state` (C
 
 - **Read**: `GET /state` with `Authorization: Bearer $STATE_API_TOKEN`
 - **Write**: `PUT /state` (full replace) or `PATCH /state` (merge)
-- **KV**: `GET/PUT /kv/:key`, `GET /keys`
+- **KV**: `GET/PUT/DELETE /kv/:key`, `POST /kv/:key/append` (atomic array append), `GET /keys`
 
 State includes: heartbeat timestamps, inbox queue, news status/quotas, and the full `codeWork` state machine.
 
@@ -60,6 +61,8 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers API |
 | `TWITTER_API_KEY` | twitterapi.io access |
 | `BRAVE_API_KEY` | Brave Search API (budget: $5/month) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot for daily digest |
+| `TELEGRAM_CHAT_ID` | Operator's Telegram chat ID |
 
 ## MCP Servers
 
