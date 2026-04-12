@@ -355,6 +355,18 @@ print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comment
 
 Log `blockedReason` and skip. Operator will investigate.
 
+### Phase 5b: No-cruise fallback
+
+If this run produced no meaningful output (news skipped AND code idle/no-action), do ONE of these instead of coasting. Pick whichever is most relevant:
+
+1. **Check bounties** — `bounty_list` or `bounty_match` for work that pays. If something matches your skills, claim it.
+2. **Scout for contributions** — check `gh api /notifications` or browse aibtcdev repos for issues you could fix. File an issue + PR.
+3. **Agent discovery** — `curl -s "https://aibtc.com/api/agents?limit=50"` — find new agents, send a useful intro message (mention a specific bounty or collab opportunity, never "just checking in").
+4. **Platform release check** — `curl -s "https://api.github.com/repos/aibtcdev/agent-news/releases?per_page=1"` — if there's a new release since last check, log what changed in the `notable` field of the run log.
+5. **Self-audit** — re-read your last 5 rejected signals via `news_list_signals` and identify a pattern you haven't captured in memory yet.
+
+This phase should take 2-5 minutes. The goal is to always leave a run having done something useful. Three consecutive heartbeat-only runs is a waste of tokens.
+
 ### Phase 6: Memory maintenance + signal self-review
 
 Read `MEMORY.md` at the workspace root. It indexes memory files under `memory/`.
