@@ -81,7 +81,9 @@ Read `reference/aibtc.news/llms.txt` for API reference.
 **Before choosing, check which beats have room on today's brief.** Fetch the current brief roster:
 `curl -s "https://aibtc.news/api/brief" | python3 -c "import sys,json; d=json.load(sys.stdin); beats={}; [beats.__setitem__(s.get('beat','?'), beats.get(s.get('beat','?'),0)+1) for s in d.get('sections',[])]; roster=d.get('roster',{}); print(f'Roster: {roster.get(\"selected_count\",0)}/{roster.get(\"max_signals\",30)}'); [print(f'  {b}: {c}') for b,c in sorted(beats.items(), key=lambda x:-x[1])]"`
 
-**Pick a beat with low representation on today's brief** (0-1 signals = best chance). Do NOT file into beats that already have 3+ signals on the roster — you will almost certainly be rejected. Rotate across runs within the beats that have room.
+**Beat rotation**: Read `newsLastBeat` from state. This is the beat researched on the previous run. From your 6 beats, filter out any with 3+ signals on the roster (too crowded — you will almost certainly be rejected). From the remaining beats, pick the next one in rotation order after `newsLastBeat`. The rotation order is: `bitcoin-macro` → `deal-flow` → `agent-skills` → `agent-economy` → `infrastructure` → `governance` → (back to `bitcoin-macro`). If `newsLastBeat` is empty, start with `bitcoin-macro`. After choosing, save the beat to state: `curl -s -X PATCH ... -d '{"newsLastBeat":"chosen-beat"}'`.
+
+Prefer beats with 0-1 signals on the roster (best approval chance), but always advance the rotation — don't repeat the same beat two runs in a row unless it's the only one with room.
 
 **4b. Dedup check** (bounded — extract only what you need):
 `curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "import sys,json; d=json.load(sys.stdin); sigs=d.get('signals',d if isinstance(d,list) else []); [print(json.dumps({k:s.get(k) for k in ['beat_slug','headline','created_at','status']})) for s in sigs]"`
@@ -404,6 +406,7 @@ Phase 6 should take < 60 seconds total. If nothing noteworthy happened and no re
 
 Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
+Always set `newsLastBeat` to the beat researched this run (even if you skipped filing) so rotation advances.
 Update `codeWork` fields based on Phase 5 actions.
 
 **Run log:** POST a JSON summary to the append endpoint. Only include fields relevant to this run — omit nulls and empty values. Keep each entry under 500 chars.
