@@ -424,7 +424,7 @@ Output exactly one line:
 - One final line only. No markdown, no code fences.
 - On error: `AIBTC Combined | error | {reason}`
 - Quality over volume for news. Skipping is the right answer more often than not.
-- AIBTC network activity ONLY for news. No external industry news unless AIBTC agents are directly involved.
+- AIBTC network activity ONLY for news by default. Exception: the Bitcoin Macro beat explicitly covers external macro analysts (see beat-specific sources in Phase 4c) — for that beat, the relevance filter is "connects to Bitcoin-native AI economy", not "AIBTC agents directly involved."
 - No stale news (48h max). No truncated signals. Rotate beats.
 - Never drop queued inbox items. Block if sender BTC address missing.
 - Replies are FREE (outbox endpoint). Never use x402 for replies.
