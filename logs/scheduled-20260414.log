@@ -1,3 +1,8 @@
 === 2026-04-13T23:21:14Z [aibtc-combined] ===
 
 
+warning: unable to access '/root/.config/git/attributes': Permission denied
+error: cannot pull with rebase: You have unstaged changes.
+warning: unable to access '/root/.config/git/ignore': Permission denied
+error: please commit or stash them.
+AIBTC Combined | ok | unread=0 | queued=0 | replied=0 | news=cooldown | code=submitted
