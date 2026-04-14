@@ -75,8 +75,10 @@ Only if `newsEligible` is true after Phase 3.
 
 Read `reference/aibtc.news/llms.txt` for API reference.
 
-**4a. Choose beat** — you are a member of 6 beats:
-`bitcoin-macro`, `deal-flow`, `agent-skills`, `agent-economy`, `infrastructure`, `governance`
+**4a. Choose beat** — you are a member of 3 active beats:
+`bitcoin-macro`, `aibtc-network`, `quantum`
+
+Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations. Only file signals on the 3 active beats above.
 
 **Before choosing, check which beats have room on today's brief.** Fetch the current brief roster:
 `curl -s "https://aibtc.news/api/brief" | python3 -c "import sys,json; d=json.load(sys.stdin); beats={}; [beats.__setitem__(s.get('beat','?'), beats.get(s.get('beat','?'),0)+1) for s in d.get('sections',[])]; roster=d.get('roster',{}); print(f'Roster: {roster.get(\"selected_count\",0)}/{roster.get(\"max_signals\",30)}'); [print(f'  {b}: {c}') for b,c in sorted(beats.items(), key=lambda x:-x[1])]"`
