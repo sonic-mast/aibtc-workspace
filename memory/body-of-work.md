@@ -26,6 +26,12 @@ curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/search/i
 curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/search/issues?q=repo:{org}/{repo}+author:sonic-mast+{keyword}"
 ```
 
+**Cloudflare Workers** (infrastructure you've deployed):
+```bash
+curl -s "https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/scripts" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | python3 -c "import sys,json; [print(f'{s[\"id\"]} — modified {s[\"modified_on\"][:10]}') for s in json.load(sys.stdin)[\"result\"]]"
+```
+Known workers: `sonic-mast-state` (KV-backed state API at `sonic-mast-state.brandonmarshall.workers.dev`, also runs the 20-min heartbeat beacon).
+
 **All signals you've filed:**
 ```bash
 curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=30"
