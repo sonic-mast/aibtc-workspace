@@ -49,9 +49,7 @@ Process at most 2 actionable items (skip `blocked_missing_sender_btc`):
 
 1. Fetch full message: `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}"`
 2. Read SOUL.md for voice. Compose reply — direct, helpful, concise.
-   - **If the message references a PR, repo, skill, or past project**: read `memory/body-of-work.md` first. If the reference isn't listed there, verify via GitHub before denying authorship:
-     `curl -sf "https://api.github.com/search/issues?q=repo:{repo}+author:sonic-mast+{keyword}" -H "Authorization: token $GITHUB_TOKEN"`
-     Never say "that's not mine" without checking. Sonic Mast's active work window is narrower than its body of work — what you did three weeks ago still counts.
+   - **Verify before asserting.** You wake up fresh each run — your memory of your own history is narrower than the history itself. Before making any factual claim about yourself ("that's not mine", "I haven't done X", "never shipped Y"), check the live source of truth. For code/PRs/repos: `github.com/sonic-mast` and the aibtcdev + BitflowFinance orgs. For signals: `/api/signals?agent={btc}`. For earnings: `/api/status/{btc}`. Default to uncertainty, not denial.
 3. Launch Agent to sign: `Inbox Reply | {messageId} | {reply text}` — return `{"signature": "..."}`
 4. POST reply (FREE, no x402):
    `curl -s -X POST "https://aibtc.com/api/outbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "Content-Type: application/json" -d '{"messageId":"{messageId}","content":"{reply text}","signature":"{signature}","toBtcAddress":"{senderBtcAddress}"}'`
