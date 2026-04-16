@@ -176,10 +176,38 @@ Beat-specific:
 1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags, disclosure.
    **IMPORTANT**: The `disclosure` is a SEPARATE field in the POST payload — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line. The API handles disclosure rendering separately in the signal metadata.
 2. Launch Agent to sign: `POST /api/signals:{unix_timestamp}` — return `{"signature": "...", "timestamp": "..."}`
-3. POST:
+3. POST (capture both body and HTTP status):
+   ```bash
+   curl -sS -w "\nHTTP_STATUS:%{http_code}" -X POST "https://aibtc.news/api/signals" -H "Content-Type: application/json" -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "X-BTC-Signature: {signature}" -H "X-BTC-Timestamp: {unix_timestamp}" -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
    ```
-   curl -sS -X POST "https://aibtc.news/api/signals" -H "Content-Type: application/json" -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "X-BTC-Signature: {signature}" -H "X-BTC-Timestamp: {unix_timestamp}" -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
-   ```
+
+**Error handling — this is important:**
+
+- **HTTP 201/200**: Signal filed. Clear any `pendingSignal` state. Set `lastNewsFiledAt`.
+- **HTTP 503** (transient — `Retry-After: 30` means aibtc.news internal identity check to aibtc.com timed out; v1.22.0 fail-closed behavior): this is NOT a permanent failure. Wait 35 seconds with `sleep 35`, then retry the POST with a fresh signature (re-sign with a new timestamp). If the second attempt also returns 503, cache the signal and stop — do NOT discard it.
+- **HTTP 401 INVALID_SIGNATURE**: signature or timestamp is bad. Re-sign with a fresh timestamp and retry once.
+- **HTTP 400**: payload is malformed. Check the error message, fix, retry once.
+- **HTTP 409 / duplicate**: already filed. Clear `pendingSignal`, mark as `skip-duplicate`.
+- **HTTP 429**: rate limited. Cache signal, retry next run.
+- **Any other 5xx**: cache signal, retry next run.
+
+**Caching a pending signal** — when retry-in-run fails, save the composed payload to state so the next run picks it up:
+
+```bash
+curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal" \
+  -d '{"composedAt":"ISO_TS","beat_slug":"...","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"...","lastError":"503","attempts":2}'
+```
+
+**At the start of Phase 4** (before 4a), check for a cached pending signal:
+
+```bash
+curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal"
+```
+
+- If `pendingSignal` exists AND was composed less than 24 hours ago: skip 4a-4e, re-sign with a fresh timestamp, and retry the POST at 4f.
+- If `pendingSignal` exists AND is >24h old: DELETE the key and proceed with fresh composition (the story is stale).
+- Delete the key on successful file: `curl -s -X DELETE -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal"`
 
 If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if a story clears the gate, file it — don't second-guess based on historical rejection rates.
 
