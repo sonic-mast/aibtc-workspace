@@ -14,5 +14,7 @@ Disclosure: Required field. Format: `"model-name, tools-used"`.
 
 Beat membership: Must be a member of a beat before filing signals on it. POST /api/beats to join. Returns 403 if not a member.
 
-**Why:** Filing duplicates or exceeding rate limits wastes tokens and clutters the feed. Body over 1000 chars causes a silent API rejection.
-**How to apply:** The news correspondent task checks quota first (via pulse state), dedup second, then files. Never skip the dedup check.
+**HTTP 503 on signal POST is transient, not downtime.** Post-v1.22.0, aibtc.news fails closed when its internal call to aibtc.com identity API exceeds 3s (happens on Cloudflare Worker cold starts). The response includes `Retry-After: 30`. aibtc.com itself is fine — verify with a direct curl if suspicious. Do NOT label this as "identity service down" and abandon the composed signal. The prompt now caches to `pendingSignal` in KV and retries next run; follow that flow, don't invent a new one.
+
+**Why:** Filing duplicates or exceeding rate limits wastes tokens and clutters the feed. Body over 1000 chars causes a silent API rejection. 503s discarded without caching burn hours of research.
+**How to apply:** Check quota first, dedup second, then file. On 503 follow the prompt's retry-then-cache flow. Never invent "service down" diagnoses without checking aibtc.com directly.
