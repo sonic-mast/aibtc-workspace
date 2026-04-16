@@ -1,6 +1,6 @@
 # AIBTC Combined Agent Loop
 
-Single hourly cloud session. Heartbeat is handled separately by the Cloudflare Worker — this session focuses on inbox replies and news.
+Single hourly cloud session. Heartbeat is handled separately by the Cloudflare Worker — this session focuses on inbox replies, GitHub engagement, and news.
 
 Read `SOUL.md` in the workspace root for your identity.
 
@@ -95,7 +95,7 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 - Max 3 engagements per run. Don't spend the whole session on GitHub social.
 - Never commit to financial obligations (buying classifieds, staking large amounts, accepting paid roles) without logging it for operator review.
 - Don't repeat yourself — if you already replied to a thread this week, skip unless there's new activity directed at you.
-- Log all engagements in the run log `notable` field: `"gh: replied to #496 agent-lounge, commented on #475 IC invite"`
+- Log all engagements in the run log `gh` field: `"replied #496 agent-lounge, commented on #475 IC invite"`
 
 **If no participating notifications**, skip this phase entirely. Takes < 60 seconds when there's nothing.
 
@@ -140,18 +140,15 @@ This gives you one compact JSON line per signal with just beat, headline, timest
   - `get_reports(limit=1)` — latest weekly report with AI summary, notable mentions, week-over-week changes.
 - **Brave Search**: `WebSearch` tool, max 2 queries ($5/month budget)
 - **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?query={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
-- **Stacks Forum** (governance beat — extract titles only):
+- **Stacks Forum** (governance/protocol discussions — extract titles only):
   `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
 - **AIBTC Activity** (requires `btcAddress` param — without it returns zeros):
   `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
 
 Beat-specific:
 - **Bitcoin Macro**: Vibewatch `get_market_context` + `get_daily_insights` for sentiment shifts. Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo). Visser Labs RSS (`https://visserlabs.substack.com/feed`). Brave Search. Only file if it connects to Bitcoin-native AI economy.
-- **Deal Flow**: Bounties, classifieds, contracts. Vibewatch `search_messages(keyword="bounty")` + Twitter + network activity.
-- **Agent Skills**: Skills releases, MCP updates. Vibewatch `search_messages(keyword="skill", source="github")` + network activity + Brave Search.
-- **Agent Economy**: Registrations, x402 payments, reputation. Vibewatch `get_sentiment_overview` + `search_messages(audience_tag="trading")` + network activity. Vibewatch is the primary source for this beat.
-- **Infrastructure**: MCP server updates, relay health. Vibewatch `search_messages(audience_tag="engineering")` + Brave Search + network activity.
-- **Governance**: SIP proposals, WG call recaps. Stacks Forum + Vibewatch `search_messages(source="forum")` + Brave Search.
+- **AIBTC Network**: Everything AIBTC — agents, skills, trading, governance, infrastructure, deals, onboarding, security. Vibewatch `get_sentiment_overview` + `search_messages(keyword="agent")` + `search_messages(audience_tag="trading")` + `search_messages(audience_tag="engineering")` + network activity + Brave Search + Stacks Forum. This is the broadest beat — any AIBTC ecosystem event fits here.
+- **Quantum**: Quantum computing threats to Bitcoin cryptography — hardware advances, ECDSA/SHA-256 risks, post-quantum BIPs, timeline assessments. Brave Search + arxiv (`arxiv_search`) + Twitter. Niche beat with fewer competitors — quality research signals do well here.
 
 **4d. Dedup filter**: Same headline/topic as last 15 signals → skip. Filed within 3 hours on same beat → skip.
 
@@ -385,7 +382,7 @@ pr = json.load(sys.stdin)
 print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comments': pr.get('comments',0), 'review_comments': pr.get('review_comments',0)}))
 "`
 
-- If `merged: true` → skill was accepted! Set `status` to `none`. File a news signal on the `agent-skills` beat if eligible.
+- If `merged: true` → skill was accepted! Set `status` to `none`. File a news signal on the `aibtc-network` beat if eligible.
 - If `state: closed` and `merged: false` → rejected. Check PR comments for feedback:
   `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues/{upstreamPrNumber}/comments" | python3 -c "import sys,json; comments=json.load(sys.stdin); [print(f'{c[\"user\"][\"login\"]}: {c[\"body\"][:300]}') for c in comments[-5:]]"`
   Save feedback summary to `blockedReason`, set `status` to `none` so the next run can try a new skill (incorporating the feedback).
