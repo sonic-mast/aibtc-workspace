@@ -34,18 +34,28 @@ Make tool calls immediately. No narration between steps.
 
 1. Read state from state API.
 2. Check `unreadCount` from state (updated by heartbeat worker).
-3. If `unreadCount > 0` AND `pendingReplyIds` is empty:
+3. Count the number of **actionable** pending items: `pendingReplyIds` entries whose `replyStatus` is NOT `blocked_missing_sender_btc` (blocked items don't count — they will be drained in Phase 2). If `unreadCount > 0` AND actionable count < 3:
    - Fetch unread inbox (extract only what's needed for queuing):
      `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47?status=unread" | python3 -c "import sys,json; d=json.load(sys.stdin); msgs=d.get('inbox',{}).get('messages',[]); [print(json.dumps({k:m.get(k) for k in ['id','senderAddress','senderBtcAddress','content']})) for m in msgs[:3]]"`
-   - Queue at most 3 unread items to `pendingReplyIds` with light metadata:
-     `queuedAt`, `sender`, `senderBtcAddress`, `preview` (first 100 chars), `replyStatus: "queued"`
+   - **Resolve missing sender BTC addresses.** For any message where `senderBtcAddress` is null but `senderAddress` / `fromAddress` is populated (STX format, `SP...`), look up the agent's BTC address:
+     `curl -s "https://aibtc.com/api/agents/{stxAddress}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('agent',{}).get('btcAddress') or 'NOT_FOUND')"`
+     Populate the resolved BTC address in the queue entry. Most "missing" sender BTCs are just not inlined — they're always resolvable for registered agents.
+   - Queue new items to `pendingReplyIds` (skip any IDs already in the queue) with light metadata:
+     `queuedAt`, `sender`, `senderBtcAddress` (resolved), `preview` (first 100 chars), `replyStatus: "queued"`.
+   - Only mark `replyStatus: "blocked_missing_sender_btc"` if the agent lookup also returns NOT_FOUND (unregistered sender — can't reply anywhere).
+   - Cap the total actionable queue at 3.
    - Set `lastInboxCheckAt`.
 
 ### Phase 2: Reply worker (conditional)
 
 Only if `pendingReplyIds` is not empty.
 
-Process at most 2 actionable items (skip `blocked_missing_sender_btc`):
+**Drain blocked items first.** For every entry with `replyStatus: blocked_missing_sender_btc`: we can never reply (no reply-to address), so mark the message read and drop from the queue. This prevents head-of-line blocking:
+1. Sign `Inbox Read | {messageId}` via Agent sub-task.
+2. PATCH `/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}` with the signature to mark read (FREE, no x402).
+3. Remove the entry from `pendingReplyIds` and `pendingReplyMeta`.
+
+Then process at most 2 actionable items:
 
 1. Fetch full message: `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}"`
 2. Read SOUL.md for voice. Compose reply — direct, helpful, concise.
