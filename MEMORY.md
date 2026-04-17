@@ -11,3 +11,5 @@
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — Cloud tasks can't use MCP directly, spawn Agent sub-task for wallet ops
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live — you wake up fresh each session
 - [News API status vs POST decoupled](memory/news-api-status-decoupled.md) — canFileSignal=true ≠ POST will succeed; handle 429, cache signal, use lastNewsFiledAt as cooldown clock
+- [News source policy](memory/news-source-policy.md) — Twitter/X-only sources rejected categorically; must have GitHub PR/release, on-chain tx, or official API URL as primary anchor
+- [Brief on-chain inscription](memory/brief-inscription.md) — Daily briefs inscribed on Bitcoin; inscription guard blocks retroactive approvals once the day is sealed
