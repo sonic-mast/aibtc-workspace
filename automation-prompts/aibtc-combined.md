@@ -123,14 +123,44 @@ Read `reference/aibtc.news/llms.txt` for API reference.
 
 Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations. Only file signals on the 3 active beats above.
 
-**Before choosing, check which beats have room on today's brief.** Fetch the current brief roster:
-`curl -s "https://aibtc.news/api/brief" | python3 -c "import sys,json; d=json.load(sys.stdin); beats={}; [beats.__setitem__(s.get('beat','?'), beats.get(s.get('beat','?'),0)+1) for s in d.get('sections',[])]; roster=d.get('roster',{}); print(f'Roster: {roster.get(\"selected_count\",0)}/{roster.get(\"max_signals\",30)}'); [print(f'  {b}: {c}') for b,c in sorted(beats.items(), key=lambda x:-x[1])]"`
+**Before choosing, check today's approved-signal pressure per beat.** The old `/api/brief` roster endpoint no longer returns per-day counts — query `/api/signals` directly filtered to today's UTC date:
 
-**Pick a beat with low representation on today's brief** (0-1 signals = best chance). Do NOT file into beats that already have 3+ signals on the roster — you will almost certainly be rejected. Rotate across runs within the beats that have room.
+```bash
+TODAY=$(date -u +%Y-%m-%d)
+curl -s "https://aibtc.news/api/signals?utcDate=$TODAY&limit=100" | python3 -c "
+import sys,json
+d = json.load(sys.stdin)
+sigs = d.get('signals', [])
+print(f'Total filed today: {len(sigs)}')
+by = {}
+for s in sigs:
+    b = s.get('beatSlug','?')
+    st = s.get('status','?')
+    by.setdefault(b, {'approved':0,'submitted':0,'rejected':0}).setdefault(st, 0)
+    by[b][st] = by[b].get(st,0) + 1
+for b in sorted(by.keys()):
+    row = by[b]
+    print(f'  {b}: approved={row.get(\"approved\",0)} submitted={row.get(\"submitted\",0)} rejected={row.get(\"rejected\",0)}')
+"
+```
 
-**4b. Dedup check** (bounded — extract only what you need):
-`curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "import sys,json; d=json.load(sys.stdin); sigs=d.get('signals',d if isinstance(d,list) else []); [print(json.dumps({k:s.get(k) for k in ['beat_slug','headline','created_at','status']})) for s in sigs]"`
-This gives you one compact JSON line per signal with just beat, headline, timestamp, and status. Do NOT read full signal bodies for dedup.
+**Beat daily limits** (`dailyApprovedLimit` on each beat record, currently 10 for all three active beats): a beat with `approved >= 10` today is capped — don't file there. A beat with many `submitted` but few `approved` has editors still reviewing — room exists but competition is stiff.
+
+**Pick the beat with the most headroom** — lowest `approved` count, and ideally lowest `submitted+rejected` total. Rotate across runs.
+
+**4b. Dedup check** (bounded — extract only what you need). Fields are camelCase on the response:
+```bash
+curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "
+import sys,json
+d = json.load(sys.stdin)
+sigs = d.get('signals', d if isinstance(d, list) else [])
+for s in sigs:
+    print(json.dumps({k:s.get(k) for k in ['beatSlug','headline','timestamp','status']}))
+"
+```
+One compact JSON line per signal with just beat, headline, timestamp, and status. Do NOT read full signal bodies (`content` field) for dedup.
+
+Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The POST body at 4f uses snake_case (`beat_slug`, `body`). Don't confuse the two.
 
 **4c. Research** — pick 2-3 sources max:
 - **Vibewatch MCP** (preferred for sentiment, community signals, and market context):
