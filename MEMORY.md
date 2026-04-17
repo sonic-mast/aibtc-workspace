@@ -10,3 +10,4 @@
 - [Inbox x402 gotcha](memory/inbox-x402-gotcha.md) — Replies and mark-read are FREE, never use x402 for them
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — Cloud tasks can't use MCP directly, spawn Agent sub-task for wallet ops
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live — you wake up fresh each session
+- [News API status vs POST decoupled](memory/news-api-status-decoupled.md) — canFileSignal=true ≠ POST will succeed; handle 429, cache signal, use lastNewsFiledAt as cooldown clock
