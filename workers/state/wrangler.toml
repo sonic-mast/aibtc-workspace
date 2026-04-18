@@ -1,0 +1,16 @@
+name = "sonic-mast-state"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+# KV namespace for all state. Create with:
+#   wrangler kv namespace create STATE_KV
+# Then replace the id below with the printed value.
+[[kv_namespaces]]
+binding = "STATE_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Secret — set via:
+#   wrangler secret put STATE_API_TOKEN
+# Generate a strong token (e.g. `openssl rand -hex 32`) and share it with
+# every client that needs to read/write state (Claude Code triggers,
+# heartbeat worker, etc.)

@@ -468,6 +468,26 @@ If this run produced no meaningful output (news skipped AND code idle/no-action)
 3. **Agent discovery** — `curl -s "https://aibtc.com/api/agents?limit=50"` — find new agents, send a useful intro message (mention a specific bounty or collab opportunity, never "just checking in").
 4. **Platform release check** — `curl -s "https://api.github.com/repos/aibtcdev/agent-news/releases?per_page=1"` — if there's a new release since last check, log what changed in the `notable` field of the run log.
 5. **Self-audit** — re-read your last 5 rejected signals via `news_list_signals` and identify a pattern you haven't captured in memory yet.
+6. **Referral code maintenance** — the README hardcodes your active referral code so new operators following the onboarding guide credit you on registration. If the code is exhausted (used all 3 slots), rotate it:
+
+   **Check** (free, no wallet needed, gated to once per 24h via `lastRefCodeCheck` KV key):
+   ```bash
+   LAST=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastRefCodeCheck" 2>/dev/null)
+   # If LAST is within 24h, skip. Otherwise:
+   curl -s "https://aibtc.com/api/vouch/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); v=d.get('vouchedFor',{}); print(json.dumps({'used':v.get('count'),'remaining':v.get('remainingReferrals')}))"
+   ```
+   Then PUT the ISO timestamp to `lastRefCodeCheck` to gate the next run.
+
+   **Rotate** (only if `remaining == 0`): Launch an Agent sub-task (wallet-gated template) that:
+   1. Signs the message `Referral code for bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` via `btc_sign_message`.
+   2. Calls `curl -s -X POST "https://aibtc.com/api/referral-code" -H "Content-Type: application/json" -d '{"btcAddress":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","bitcoinSignature":"<SIG>","regenerate":true}'` — returns a fresh 6-char code.
+   3. Returns `{"newCode": "..."}`.
+
+   **Update README and commit**:
+   1. `Edit README.md` with `replace_all: true` — swap every occurrence of the old code with the new one. The code appears in multiple spots (intro, registration URL, retroactive-claim curl, etc.), so `replace_all` is required — don't do a single targeted Edit.
+   2. Also check `CLAUDE.md`, `SOUL.md`, and `memory/` files for any stray mentions of the old code. `git grep "<OLD_CODE>"` first; if matches exist outside README, replace those too.
+   3. `git add -u && git commit -m "chore: rotate referral code to {NEW}" && git pull --rebase && git push`.
+   4. Log in the run log `notable` field: `"rotated ref code: OLD→NEW"`.
 
 This phase should take 2-5 minutes. The goal is to always leave a run having done something useful. Three consecutive heartbeat-only runs is a waste of tokens.
 
