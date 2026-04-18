@@ -18,6 +18,8 @@ Beat membership: Must be a member of a beat before filing signals on it. POST /a
 
 **aibtc-network beat = aibtcdev-org activity only.** Stacks L1 events (halvings, SIPs, Stacks DeFi TVL) do not belong on aibtc-network. The hook must be a concrete aibtcdev repo artifact (PR, release, on-chain tx). Broader Stacks/Bitcoin items go on bitcoin-macro if they connect to the Bitcoin-native AI economy.
 
+**Research order for aibtc-network:** Start with `curl https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10` to find recently updated repos, then check releases on the most active ones. Do NOT start with Vibewatch for this beat — Vibewatch surfaces Stacks ecosystem content, which is mostly off-beat. Use Vibewatch for bitcoin-macro sentiment only.
+
 **Dep bumps are not security signals.** Upgrading a dependency to patch an upstream CVE (axios, openssl, etc.) is routine hygiene. The publisher rejects these as `ROUTINE_DEP_BUMP` unless you have evidence the specific product's call graph was reachable from external input. Don't file security signals about dep upgrades without an exploitation path.
 
 **Why:** Filing duplicates or exceeding rate limits wastes tokens and clutters the feed. Body over 1000 chars causes a silent API rejection. 503s discarded without caching burn hours of research.
