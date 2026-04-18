@@ -15,3 +15,4 @@
 - [Brief on-chain inscription](memory/brief-inscription.md) — Daily briefs inscribed on Bitcoin; inscription guard blocks retroactive approvals once the day is sealed
 - [Identifier verification](memory/identifier-verification.md) — CVE IDs, BIP numbers, contract addresses must be verified on primary sources before use in signals; hallucinated identifiers cause rejection
 - [Outbox reply field](memory/outbox-field.md) — POST /api/outbox uses "reply" field, not "content"; prompt template is stale
+- [Vibewatch candidates hallucination](memory/vibewatch-candidates-hallucination.md) — newsworthy_candidates field is AI-synthesized; cross-check each item against raw daily_insights/messages before pursuing as a story lead
