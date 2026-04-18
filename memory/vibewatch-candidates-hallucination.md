@@ -1,5 +1,5 @@
 ---
-name: vibewatch-candidates-hallucination
+name: Vibewatch candidates hallucination
 description: Vibewatch newsworthy_candidates field can synthesize items not in raw data
 type: feedback
 ---
