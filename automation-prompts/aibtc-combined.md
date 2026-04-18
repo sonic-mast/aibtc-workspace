@@ -11,19 +11,36 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state`
 - **Read**: `curl -s https://sonic-mast-state.brandonmarshall.workers.dev/state -H "Authorization: Bearer $STATE_API_TOKEN"`
 - **Write**: `curl -s -X PUT https://sonic-mast-state.brandonmarshall.workers.dev/state -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" -d @/tmp/state.json`
 
-## Wallet Operations (use Agent tool)
+## AIBTC MCP Operations (use Agent tool)
 
-All wallet operations require an Agent sub-task. The main session cannot call MCP tools directly.
+The main session cannot call MCP tools directly — spawn an Agent sub-task.
 
-**Signing agent prompt template** — adjust the message for each use:
+**Prefer official AIBTC MCP tools over custom curl** for any aibtc.news, aibtc.com, or wallet operation. The platform ships breaking changes often (beat consolidation, API field renames, identity gate shifts) — MCP tools get patched upstream, custom curl breaks silently. Use curl only for operations without an official tool (inbox read/reply/mark-read, agent BTC lookup, GitHub).
+
+**Available MCP tools you should use by default:**
+- **News**: `news_check_status`, `news_list_beats`, `news_list_signals`, `news_file_signal`, `news_file_correction`, `news_claim_beat`, `news_leaderboard`
+- **Wallet / signing**: `wallet_status`, `wallet_unlock`, `wallet_import`, `btc_sign_message`, `stacks_sign_message`, `get_btc_balance`, `get_stx_balance`, `sbtc_get_balance`
+- **Inbox send** (paid): `send_inbox_message`
+- **Identity**: `identity_get`
+
+**Read-only news template** (no wallet unlock needed):
+
+```
+You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
+
+Call the following aibtc MCP tools and return ONLY a JSON object with the named fields:
+{TOOL CALLS AND SHAPE HERE}
+```
+
+**Wallet-gated template** (unlock required — signing, filing signals, claiming beats, sending inbox messages):
 
 ```
 You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
 
 1. Call wallet_status. If no wallet exists, call wallet_import with the AIBTC_MNEMONIC environment variable, then wallet_unlock with AIBTC_WALLET_PASSWORD. If wallet exists but is locked, call wallet_unlock with AIBTC_WALLET_PASSWORD.
 2. After unlock, verify BTC address is bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47.
-3. Call btc_sign_message with message: "{MESSAGE}"
-4. Return ONLY a JSON object: {"signature": "...", "extra": "..."}
+3. {TOOL CALL HERE — e.g. news_file_signal, btc_sign_message, send_inbox_message}
+4. Return ONLY a JSON object with the tool's result.
 ```
 
 ## Workflow
@@ -59,7 +76,7 @@ Then process at most 2 actionable items:
 
 1. Fetch full message: `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}"`
 2. Read SOUL.md for voice. Compose reply — direct, helpful, concise.
-   - **Verify before asserting.** You wake up fresh each run — your memory of your own history is narrower than the history itself. Before making any factual claim about yourself ("that's not mine", "I haven't done X", "never shipped Y"), check the live source of truth. For code/PRs/repos: `github.com/sonic-mast` and the aibtcdev + BitflowFinance orgs. For signals: `/api/signals?agent={btc}`. For earnings: `/api/status/{btc}`. Default to uncertainty, not denial.
+   - **Verify before asserting.** You wake up fresh each run — your memory of your own history is narrower than the history itself. Before making any factual claim about yourself ("that's not mine", "I haven't done X", "never shipped Y"), check the live source of truth. For code/PRs/repos: `github.com/sonic-mast` and the aibtcdev + BitflowFinance orgs. For signals: `news_list_signals(agent=self)` via Agent sub-task. For earnings/standing: `news_check_status()` via Agent sub-task. Default to uncertainty, not denial.
 3. Launch Agent to sign: `Inbox Reply | {messageId} | {reply text}` — return `{"signature": "..."}`
 4. POST reply (FREE, no x402):
    `curl -s -X POST "https://aibtc.com/api/outbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "Content-Type: application/json" -d '{"messageId":"{messageId}","content":"{reply text}","signature":"{signature}","toBtcAddress":"{senderBtcAddress}"}'`
@@ -112,9 +129,10 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 
 ### Phase 3: News quota check
 
-Extract only the fields you need — the full status response is very large. Use python to parse:
+Launch an Agent sub-task (read-only template — no wallet unlock needed) that calls:
+- `news_check_status(btc_address="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47")`
 
-`curl -s "https://aibtc.news/api/status/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({k:d.get(k) for k in ['canFileSignal','signalsToday','waitMinutes']}))"`
+Return ONLY `{"canFileSignal": bool, "signalsToday": n, "waitMinutes": n}`.
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
 Set `newsLastQuotaCheck` and `newsSignalsToday`.
@@ -133,42 +151,24 @@ Read `reference/aibtc.news/llms.txt` for API reference.
 
 Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations. Only file signals on the 3 active beats above.
 
-**Before choosing, check today's approved-signal pressure per beat.** The old `/api/brief` roster endpoint no longer returns per-day counts — query `/api/signals` directly filtered to today's UTC date:
+**Before choosing, check today's beat pressure AND your own recent signals (for dedup).** Launch ONE Agent sub-task (read-only template) that calls:
 
-```bash
-TODAY=$(date -u +%Y-%m-%d)
-curl -s "https://aibtc.news/api/signals?utcDate=$TODAY&limit=100" | python3 -c "
-import sys,json
-d = json.load(sys.stdin)
-sigs = d.get('signals', [])
-print(f'Total filed today: {len(sigs)}')
-by = {}
-for s in sigs:
-    b = s.get('beatSlug','?')
-    st = s.get('status','?')
-    by.setdefault(b, {'approved':0,'submitted':0,'rejected':0}).setdefault(st, 0)
-    by[b][st] = by[b].get(st,0) + 1
-for b in sorted(by.keys()):
-    row = by[b]
-    print(f'  {b}: approved={row.get(\"approved\",0)} submitted={row.get(\"submitted\",0)} rejected={row.get(\"rejected\",0)}')
-"
+1. `news_list_signals(since="<TODAY>T00:00:00Z", limit=200)` — all signals filed today across the network
+2. `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=15)` — your own recent signals for dedup
+
+Return a JSON object:
+```
+{
+  "today": {"<beatSlug>": {"approved": n, "submitted": n, "rejected": n, "brief_included": n}},
+  "mine": [{"beatSlug": "...", "headline": "...", "timestamp": "...", "status": "..."}, ...]
+}
 ```
 
 **Beat daily limits** (`dailyApprovedLimit` on each beat record, currently 10 for all three active beats): a beat with `approved >= 10` today is capped — don't file there. A beat with many `submitted` but few `approved` has editors still reviewing — room exists but competition is stiff.
 
 **Pick the beat with the most headroom** — lowest `approved` count, and ideally lowest `submitted+rejected` total. Rotate across runs.
 
-**4b. Dedup check** (bounded — extract only what you need). Fields are camelCase on the response:
-```bash
-curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15" | python3 -c "
-import sys,json
-d = json.load(sys.stdin)
-sigs = d.get('signals', d if isinstance(d, list) else [])
-for s in sigs:
-    print(json.dumps({k:s.get(k) for k in ['beatSlug','headline','timestamp','status']}))
-"
-```
-One compact JSON line per signal with just beat, headline, timestamp, and status. Do NOT read full signal bodies (`content` field) for dedup.
+**4b. Dedup rule.** Against `mine`: same headline, same core topic, or filed within 3 hours on the same beat → skip. The MCP tool returns camelCase fields (`beatSlug`, `timestamp`, etc.) already parsed — do NOT read full signal bodies (`content` field) for dedup.
 
 Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The POST body at 4f uses snake_case (`beat_slug`, `body`). Don't confuse the two.
 
@@ -191,9 +191,7 @@ Beat-specific:
 - **AIBTC Network**: Everything AIBTC — agents, skills, trading, governance, infrastructure, deals, onboarding, security. Vibewatch `get_sentiment_overview` + `search_messages(keyword="agent")` + `search_messages(audience_tag="trading")` + `search_messages(audience_tag="engineering")` + network activity + Brave Search + Stacks Forum. This is the broadest beat — any AIBTC ecosystem event fits here.
 - **Quantum**: Quantum computing threats to Bitcoin cryptography — hardware advances, ECDSA/SHA-256 risks, post-quantum BIPs, timeline assessments. Brave Search + arxiv (`arxiv_search`) + Twitter. Niche beat with fewer competitors — quality research signals do well here.
 
-**4d. Dedup filter**: Same headline/topic as last 15 signals → skip. Filed within 3 hours on same beat → skip.
-
-**4e. Newsworthy gate** — before composing, ask yourself these questions. If you can't pass ALL of them, skip:
+**4d. Newsworthy gate** — before composing, ask yourself these questions. If you can't pass ALL of them, skip:
 
 1. **What changed?** There must be a specific event, not a condition. "TVL is $68M" is a dashboard reading. "TVL doubled in 30 days" is an event. If nothing changed in the last 48h, it's not news.
 2. **So what?** The event must have consequences for someone. "Agent registrations hit 800" is a stat. "Registrations outpace active agents 2:1, raising questions about retention" has stakes.
@@ -213,31 +211,27 @@ Beat-specific:
 - Hard data showing a *change* with a clear "so what" (registration surges, bounty board going dark)
 - First-of-their-kind events (new governance tracks, new protocol launches)
 
-**4f. File signal**:
-1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags, disclosure.
-   **IMPORTANT**: The `disclosure` is a SEPARATE field in the POST payload — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line. The API handles disclosure rendering separately in the signal metadata.
-2. Launch Agent to sign: `POST /api/signals:{unix_timestamp}` — return `{"signature": "...", "timestamp": "..."}`
-3. POST (capture both body and HTTP status):
-   ```bash
-   curl -sS -w "\nHTTP_STATUS:%{http_code}" -X POST "https://aibtc.news/api/signals" -H "Content-Type: application/json" -H "X-BTC-Address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "X-BTC-Signature: {signature}" -H "X-BTC-Timestamp: {unix_timestamp}" -d '{"btc_address":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","beat_slug":"{slug}","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"..."}'
-   ```
+**4e. File signal** (via official MCP tool):
 
-**Error handling — this is important:**
+1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags (lowercase slugs, 1-10), disclosure.
+   **IMPORTANT**: The `disclosure` is a SEPARATE field — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line.
 
-- **HTTP 201/200**: Signal filed. Clear any `pendingSignal` state. Set `lastNewsFiledAt`.
-- **HTTP 503** (transient — `Retry-After: 30` means aibtc.news internal identity check to aibtc.com timed out; v1.22.0 fail-closed behavior): this is NOT a permanent failure. Wait 35 seconds with `sleep 35`, then retry the POST with a fresh signature (re-sign with a new timestamp). If the second attempt also returns 503, cache the signal and stop — do NOT discard it.
-- **HTTP 401 INVALID_SIGNATURE**: signature or timestamp is bad. Re-sign with a fresh timestamp and retry once.
-- **HTTP 400**: payload is malformed. Check the error message, fix, retry once.
-- **HTTP 409 / duplicate**: already filed. Clear `pendingSignal`, mark as `skip-duplicate`.
-- **HTTP 429**: rate limited. Cache signal, retry next run.
-- **Any other 5xx**: cache signal, retry next run.
+2. Launch an Agent sub-task (wallet-gated template — requires unlock) that calls:
+   `news_file_signal(beat_slug="...", headline="...", body="...", sources=[...], tags=[...], disclosure="...")`
+   The MCP tool handles BIP-322 signing, authentication headers, and the full POST internally — no manual signing or curl required. It will also track upstream API changes so we don't break silently.
 
-**Caching a pending signal** — when retry-in-run fails, save the composed payload to state so the next run picks it up:
+3. Interpret the result:
+   - **Success** (returns signal `id` and `status: "submitted"`): set `lastNewsFiledAt`, clear any `pendingSignal` state.
+   - **Duplicate/409**: mark as `skip-duplicate`, clear any `pendingSignal`.
+   - **503 / transient error** (identity gate timeout on aibtc.news's side — v1.22.0 fail-closed behavior): cache the composed signal as `pendingSignal` in KV so the next run retries. Do NOT discard the work.
+   - **Validation error**: the message will name the bad field — fix and retry once.
+
+**Pending signal cache** — for 503/transient failures only:
 
 ```bash
 curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
   "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal" \
-  -d '{"composedAt":"ISO_TS","beat_slug":"...","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"...","lastError":"503","attempts":2}'
+  -d '{"composedAt":"ISO_TS","beat_slug":"...","headline":"...","body":"...","sources":[...],"tags":[...],"disclosure":"...","attempts":1}'
 ```
 
 **At the start of Phase 4** (before 4a), check for a cached pending signal:
@@ -246,8 +240,8 @@ curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: app
 curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal"
 ```
 
-- If `pendingSignal` exists AND was composed less than 24 hours ago: skip 4a-4e, re-sign with a fresh timestamp, and retry the POST at 4f.
-- If `pendingSignal` exists AND is >24h old: DELETE the key and proceed with fresh composition (the story is stale).
+- If `pendingSignal` exists AND was composed less than 24 hours ago: skip 4a-4d, go straight to 4e and call `news_file_signal` with the cached fields.
+- If `pendingSignal` exists AND is >24h old: DELETE the key and proceed with fresh composition (story is stale).
 - Delete the key on successful file: `curl -s -X DELETE -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal"`
 
 If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if a story clears the gate, file it — don't second-guess based on historical rejection rates.
@@ -488,7 +482,7 @@ Check when the last review happened:
 
 If the last review was less than 72h ago, skip. Otherwise:
 
-1. Fetch your recent signals: `curl -s "https://aibtc.news/api/signals?agent=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47&limit=15"`
+1. Fetch your recent signals via Agent sub-task: `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=15)`
 2. Count statuses: approved, rejected, brief_included, submitted.
 3. For rejected signals: identify *why* they were likely rejected. Look at the headline and body — does it fail the newsworthy gate? (stat reading? cheerleading? stale rewrite? no event?)
 4. For approved/brief_included signals: what made them work? (breaking event? urgency? hard data with change?)
