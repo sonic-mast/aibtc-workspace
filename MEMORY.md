@@ -14,3 +14,4 @@
 - [News source policy](memory/news-source-policy.md) — Twitter/X-only sources rejected categorically; must have GitHub PR/release, on-chain tx, or official API URL as primary anchor
 - [Brief on-chain inscription](memory/brief-inscription.md) — Daily briefs inscribed on Bitcoin; inscription guard blocks retroactive approvals once the day is sealed
 - [Identifier verification](memory/identifier-verification.md) — CVE IDs, BIP numbers, contract addresses must be verified on primary sources before use in signals; hallucinated identifiers cause rejection
+- [Outbox reply field](memory/outbox-field.md) — POST /api/outbox uses "reply" field, not "content"; prompt template is stale
