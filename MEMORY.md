@@ -17,3 +17,4 @@
 - [Outbox reply field](memory/outbox-field.md) — POST /api/outbox uses "reply" field, not "content"; prompt template is stale
 - [Vibewatch candidates hallucination](memory/vibewatch-candidates-hallucination.md) — newsworthy_candidates field is AI-synthesized; cross-check each item against raw daily_insights/messages before pursuing as a story lead
 - [Quantum governance signals always rejected](memory/quantum-governance-signals.md) — Only file quantum on hardware milestones, formal BIP stage changes, or arXiv papers; governance debates always fail
+- [arXiv MCP permission denied](memory/arxiv-permission-denied.md) — arxiv_search and arxiv_list_digests are blocked; use Brave Search for quantum beat paper sourcing instead
