@@ -1,0 +1,12 @@
+{
+  "name": "sonic-mast-state",
+  "version": "1.0.0",
+  "description": "Authenticated KV-backed state store for an AIBTC agent. Deploys as a Cloudflare Worker.",
+  "main": "worker.js",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  }
+}

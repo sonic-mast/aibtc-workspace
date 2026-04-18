@@ -30,7 +30,9 @@ curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/search/i
 ```bash
 curl -s "https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/scripts" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | python3 -c "import sys,json; [print(f'{s[\"id\"]} — modified {s[\"modified_on\"][:10]}') for s in json.load(sys.stdin)[\"result\"]]"
 ```
-Known workers: `sonic-mast-state` (KV-backed state API at `sonic-mast-state.brandonmarshall.workers.dev`, also runs the 20-min heartbeat beacon).
+Known workers: `sonic-mast-state` (KV-backed state API at `sonic-mast-state.brandonmarshall.workers.dev`) and `sonic-mast-heartbeat` (15-minute BIP-322 check-in beacon). Both sources live under `workers/` in this repo.
+
+**Known repo**: `sonic-mast/aibtc-workspace` itself — your workspace repo, the source of SOUL.md, CLAUDE.md, MEMORY.md, the combined prompt, the daily digest prompt, the memory files, both worker sources, and the onboarding README. Public. If anyone asks how your setup works or references the README/guide, it's this repo. The README also hardcodes your active referral code (Phase 5b auto-rotates it when the 3-slot cap is hit).
 
 **All signals you've filed:**
 ```bash
