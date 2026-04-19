@@ -172,24 +172,34 @@ Return a JSON object:
 
 Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The POST body at 4f uses snake_case (`beat_slug`, `body`). Don't confuse the two.
 
-**4c. Research** — pick 2-3 sources max:
-- **Vibewatch MCP** (preferred for sentiment, community signals, and market context):
-  - `get_daily_insights(days=3)` — highlights/lowlights with source citations. Best for spotting newsworthy patterns.
-  - `get_sentiment_overview(days=7)` — aggregate sentiment score, per-source breakdown, message volume trends.
-  - `get_market_context(days=30)` — Fear & Greed Index, tracked token data, sentiment-vs-market comparison.
-  - `search_messages(keyword="...", source="...", limit=10)` — search community messages across Discord, Telegram, X, GitHub, forum. Filter by sentiment, audience, date range.
-  - `get_reports(limit=1)` — latest weekly report with AI summary, notable mentions, week-over-week changes.
-- **Brave Search**: `WebSearch` tool, max 2 queries ($5/month budget)
-- **Twitter**: `curl -s "https://api.twitterapi.io/twitter/tweet/advanced_search?query={query}&count=10" -H "X-API-Key: $TWITTER_API_KEY"`
-- **Stacks Forum** (governance/protocol discussions — extract titles only):
-  `curl -s "https://forum.stacks.org/latest.json" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f'{t[\"id\"]}: {t[\"title\"]} ({t[\"created_at\"][:10]})') for t in d.get('topic_list',{}).get('topics',[])[:10]]"`
-- **AIBTC Activity** (requires `btcAddress` param — without it returns zeros):
-  `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Stats:',json.dumps(d.get('stats',{}))); [print(f'{e[\"type\"]}: {e[\"agent\"][\"displayName\"]} {e.get(\"achievementName\",\"\")}') for e in d.get('events',[])[:10]]"`
+**4c. Research — event-first, not source-first.** You are burning tokens if you open sources before naming the class of event you're hunting for. Work the phases in order; each has a skip path.
 
-Beat-specific:
-- **Bitcoin Macro**: Vibewatch `get_market_context` + `get_daily_insights` for sentiment shifts. Twitter KOLs (@LynAldenContact, @jvisserlabs, @dgt10011, @dpuellARK, @willywoo). Visser Labs RSS (`https://visserlabs.substack.com/feed`). Brave Search. Only file if it connects to Bitcoin-native AI economy.
-- **AIBTC Network**: Everything AIBTC — agents, skills, trading, governance, infrastructure, deals, onboarding, security. Vibewatch `get_sentiment_overview` + `search_messages(keyword="agent")` + `search_messages(audience_tag="trading")` + `search_messages(audience_tag="engineering")` + network activity + Brave Search + Stacks Forum. This is the broadest beat — any AIBTC ecosystem event fits here.
-- **Quantum**: Quantum computing threats to Bitcoin cryptography — hardware advances, ECDSA/SHA-256 risks, post-quantum BIPs, timeline assessments. Brave Search + arxiv (`arxiv_search`) + Twitter. Niche beat with fewer competitors — quality research signals do well here.
+**4c.0 Name the event class for the chosen beat.** If you can't name a class from the table below, skip the beat this run — do not open research sources.
+
+| Beat | Event classes that land | Do NOT hunt for these (rejection-bait) |
+|---|---|---|
+| `aibtc-network` | Measured usage outcome on an aibtcdev-org artifact with a dollar or count number tied to a specific agent or deal (e.g. Jing Swap $4.6k slippage saved / $200k cleared; Ionic Anvil 74 inbound responses); deadline-driven deprecation with a user impact; on-chain exploit with CVE + fix commit. Hook must be a concrete aibtcdev repo PR/release/tx per `memory/news-filing.md`. | Platform version bumps, toolkit launches, ecosystem recruiting without user-outcome numbers, self-referential aibtc.news / agent-news updates, Stacks L1 events that don't hook to an aibtcdev repo artifact. |
+| `bitcoin-macro` | Institutional product filings (ETFs, bank entrants, regulated derivatives) with SEC/issuer filing link; verifiable flow above a stated threshold; regulatory deadline changes. | F&G sentiment deltas as the headline, narrative summaries, "bounce off low" framings, Twitter-only KOL takes. |
+| `quantum` | Hardware milestones (qubit count, error rate, decoherence time) from primary vendor press; formal BIP stage changes on a cryptography-relevant proposal; arXiv papers with ECDSA/SHA-256 implications. | Governance debates (BIP-361 freeze disputes, developer A vs B posture, "tripwire" / coin-freeze punditry) — per `memory/quantum-governance-signals.md`. |
+
+**4c.1 Source-to-event mapping.** Each event class has a primary anchor. Twitter/X is never primary (`memory/news-source-policy.md` — publisher rejects Twitter-only signals categorically).
+
+- **AIBTC usage outcomes (aibtc-network)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
+- **Institutional flow / ETFs (bitcoin-macro)** — PRIMARY: SEC EDGAR search for filings, issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts.
+- **Quantum hardware / BIPs** — PRIMARY: `arxiv_search` for papers with Bitcoin-cryptography implications, IBM/Google/PsiQuantum vendor press for hardware milestones, bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
+
+**4c.2 Vibewatch — Stacks-ecosystem community monitor, not a story-lead engine.** Vibewatch aggregates mentions of `@Stacks` / `$STX` on X plus the official Stacks Telegram and Discord. It's the free substitute for paid Twitter when you need to know what the Stacks community is chattering about. Use it this way:
+
+- **Primary use — ecosystem-chatter scanner for aibtc-network.** `search_messages(keyword="...", audience_tag="engineering")` and `get_daily_insights(days=3)` tell you what conversation is heating up. Use to spot *candidate topics*, then validate each against an aibtcdev-org artifact before it becomes a lead. If the chatter is pure Stacks L1 with no aibtcdev hook, drop it. The aibtcdev GitHub sweep in 4c.1 stays the primary — Vibewatch only seeds the search.
+- **Secondary use — numeric anchor for bitcoin-macro.** `get_market_context(days=30)` returns F&G, tracked token data, sentiment-vs-market from an aggregation pipeline (not LLM-synthesized) — safe to cite as secondary alongside a primary SEC/issuer anchor. Never let F&G be the *headline* (per 4c.0 rejection list).
+- **Not useful for quantum.** Coverage is Stacks/Bitcoin ecosystem chatter, not quantum research. Quantum stays on arXiv + vendor press.
+- **Treat every Vibewatch-surfaced claim like a tweet.** Never primary. Every number, date, contract address, or named party must be re-verified against a primary anchor before it enters the composed signal.
+- **Do NOT use `newsworthy_candidates`.** Per `memory/vibewatch-candidates-hallucination.md`, that field is AI-synthesized and has produced fabricated leads. Use raw `search_messages` / `get_daily_insights` / `get_market_context` output and judge for yourself.
+- `get_sentiment_overview` and `get_reports` are framing, not events — do not base a signal on them.
+
+**4c.3 Kill research early.** If the first primary-source pass from 4c.1 does not surface an instance of the event class from 4c.0, skip this beat this run. Do not escalate to a second source trying to retrofit a story — that is how ecosystem-cheerleading rewrites get composed.
+
+**4c.4 Beat pressure check.** Using the daily counts you already pulled in 4a/4b, if the chosen beat has `approved == 0` today AND `(submitted + rejected) >= 30`, the editorial bar is currently stiff on that beat — rotate to a different beat with headroom unless your candidate event is unusually strong (primary-source number plus urgency).
 
 **4d. Newsworthy gate** — before composing, ask yourself these questions. If you can't pass ALL of them, skip:
 
@@ -205,6 +215,10 @@ Beat-specific:
 - Stale rewrites of previously filed topics
 - "Activity continues" framing (conditions persisting is not news)
 - Platform bugs reported as news signals
+- Quantum governance debates — BIP-361 freeze disputes, developer posture stories, "tripwire" punditry (per `memory/quantum-governance-signals.md`)
+- Self-referential platform news — aibtc.news version bumps, agent-news releases, AIBTC platform tooling patches
+- F&G / sentiment index readings framed as the headline event
+- Product launch announcements with no primary-source user-outcome number (toolkit ships, version bumps, recruiting campaigns)
 
 **Patterns that get approved:**
 - Breaking events with urgency (delistings, deadlines, outages)
@@ -288,6 +302,7 @@ These rules exist because previous submissions were rejected. Follow them exactl
 10. **Reference existing skills as patterns.** Before building, read 1-2 existing skills from the upstream repo (e.g., `skills/dca/dca.ts`) to understand the correct patterns, SDK usage, and output format.
 11. **Commit message format**: `feat({skill-name}): add {skill-name} skill`
 12. **Include submission history** in PR body — mention any previous PRs (PR #224, #225 were closed for this agent).
+13. **Remote runs cannot sign git commits.** If `test -f /home/claude/.ssh/commit_signing_key.pub` returns true, you are in the remote environment — the Claude Code signing server returns `400 missing source` and a fallback to `mcp__github__push_files` mid-turn stream-idle-timeouts. For any push to `sonic-mast/bff-skills` or upstream, skip local `git commit` / `git push` entirely and use `mcp__github__push_files` directly from the start (pass the commit message as `message`, the branch as `branch`, and the changed files as `files`). Local runs continue to use `git commit && git push`.
 
 #### PR body format
 
@@ -349,8 +364,10 @@ For BFF skills:
 5. Skills must be WRITE skills (execute transactions, not read-only).
 6. **Verify all contract addresses exist on mainnet** before committing: `curl -s "https://api.hiro.so/extended/v1/contract/{address}.{name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('EXISTS' if 'tx_id' in d else 'NOT FOUND:', d.get('error',d.get('tx_id',''))[:80])"`
 7. Run the skill's `doctor` command to verify it works.
-8. Commit: `git commit -m "feat({skill-name}): add {skill-name} skill"`
-9. Push and open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
+8. Push the three skill files to `skill/{skill-name}` on the fork. Env-branch per CRITICAL rule 13:
+   - **Local**: `git add skills/{skill-name} && git commit -m "feat({skill-name}): add {skill-name} skill" && git push -u origin skill/{skill-name}`.
+   - **Remote**: skip `git commit` — call `mcp__github__push_files` with `owner=sonic-mast`, `repo=bff-skills`, `branch=skill/{skill-name}`, `message="feat({skill-name}): add {skill-name} skill"`, and the three file paths/contents in `files`. Do not attempt local signing first; it will fail and burn the turn.
+9. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
    Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
    Base branch: `main`. Head branch: `skill/{skill-name}`.
 10. Use the PR body format above. Include submission history (Sonic Mast previous PRs: #224, #225 closed).
@@ -419,7 +436,10 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
 4. **Re-verify contract addresses** if any were flagged. Do not fix a fabricated address with another fabricated address.
-5. Commit and push to the same branch. Both bots will automatically re-review on new commits.
+5. Push the fix to the same branch. Env-branch per CRITICAL rule 13:
+   - **Local**: `git add <changed-files> && git commit -m "fix({skill-name}): <short reason>" && git push`.
+   - **Remote**: skip `git commit` — call `mcp__github__push_files` with the same owner/repo/branch from state and the fixed file contents. A bare `git commit` in remote returns `signing operation failed: ... 400 missing source` and then stream-idle-timeouts on the MCP pivot — go straight to MCP.
+   Both bots will automatically re-review on new commits either way.
 6. Set `status` back to `awaiting-review`, update `lastActionAt`.
 7. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
