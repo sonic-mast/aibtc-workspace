@@ -19,3 +19,4 @@
 - [Quantum governance signals always rejected](memory/quantum-governance-signals.md) — Only file quantum on hardware milestones, formal BIP stage changes, or arXiv papers; governance debates always fail
 - [arXiv MCP permission denied](memory/arxiv-permission-denied.md) — arxiv_search and arxiv_list_digests are blocked; use Brave Search for quantum beat paper sourcing instead
 - [Inbox API field names stale](memory/inbox-field-names.md) — Use messageId/fromAddress/peerBtcAddress; prompt template uses wrong keys (id/senderAddress/senderBtcAddress)
+- [Quantum paper staleness](memory/quantum-paper-staleness.md) — Check arXiv submission date before filing; commentary about old papers does not reset the 48h news clock
