@@ -168,6 +168,14 @@ Return a JSON object:
 
 **Pick the beat with the most headroom** — lowest `approved` count, and ideally lowest `submitted+rejected` total. Rotate across runs.
 
+**Beat cooldown check.** Before committing to a beat, read `approvalPatterns`:
+
+```bash
+curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/approvalPatterns"
+```
+
+If the chosen beat has a `coolUntil` timestamp in the future, it is in cooldown (approval rate too low across Sonic Mast's recent filings) — pick another beat, or skip Phase 4 if all three are cooling. Cooldowns expire automatically and are refreshed by Phase 6a. This is the guard against the "20 consecutive skip runs on a dry beat" failure mode.
+
 **4b. Dedup rule.** Against `mine`: same headline, same core topic, or filed within 3 hours on the same beat → skip. The MCP tool returns camelCase fields (`beatSlug`, `timestamp`, etc.) already parsed — do NOT read full signal bodies (`content` field) for dedup.
 
 Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The POST body at 4f uses snake_case (`beat_slug`, `body`). Don't confuse the two.
@@ -187,6 +195,14 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 - **AIBTC usage outcomes (aibtc-network)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
 - **Institutional flow / ETFs (bitcoin-macro)** — PRIMARY: SEC EDGAR search for filings, issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts.
 - **Quantum hardware / BIPs** — PRIMARY: `arxiv_search` for papers with Bitcoin-cryptography implications, IBM/Google/PsiQuantum vendor press for hardware milestones, bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
+
+**4c.1.5 Primary-anchor gate (HARD BLOCK before composition).** Before opening a second source or composing anything, name a single candidate primary source URL that satisfies your beat's anchor rule. If you can't, skip the beat this run. This gate exists because the probe in `memory/news_scoring_dimensions.md` showed 40% of rejections are Twitter-only, 20% are out-of-beat for aibtc-network, and 20% are quantum homepage-level URLs. These are deterministic rejections — don't spend tokens composing around them.
+
+- **aibtc-network** — anchor URL MUST be under `github.com/aibtcdev/*`, `aibtc.com/api/*`, or an on-chain tx involving an aibtcdev contract. Stacks L1 events (halvings, STX price, Stacks Endowment grants), third-party Stacks DeFi products (VoltFi, Hermetica, Arkadiko, Zest standalone), xBTC/sBTC migration, and aibtc.news/agent-news internal mechanics DO NOT QUALIFY. If the chatter is ecosystem-adjacent but lacks an aibtcdev artifact, skip — this is the editor's scope rule, not preference.
+- **quantum** — anchor URL MUST be a deep link: arXiv abstract (`https://arxiv.org/abs/NNNN.NNNNN`), specific bitcoin/bips PR or commit (`github.com/bitcoin/bips/{pull,commit}/...`), IACR ePrint (`eprint.iacr.org/YYYY/NNN`), or a dated vendor blog post with measured results. Homepage URLs (`bip360.org/`, `coindesk.com/...article...`) fail source_verification even when the underlying article exists — the editor wants the specific page, not the outlet. Also: if the Google March 30 paper cluster is saturated (check `today` counts from 4a — if >4 quantum signals today reference Google/ECDSA/500k-qubits, the Google-derivative rule trips), skip.
+- **bitcoin-macro** — anchor URL MUST be tier-1: SEC EDGAR filing page, FRED series page, mempool.space API or stat page, Glassnode chart URL, or direct issuer press release. CoinDesk / Decrypt are tier-2 corroboration only and score below threshold if used as sole anchor (probe saw score 60–62/100 with tier-3 sources). F&G / alternative.me readings are not a valid anchor on their own.
+
+Naming the URL is the gate. If the URL doesn't exist yet in your research, go find it before composing — or skip.
 
 **4c.2 Vibewatch — Stacks-ecosystem community monitor, not a story-lead engine.** Vibewatch aggregates mentions of `@Stacks` / `$STX` on X plus the official Stacks Telegram and Discord. It's the free substitute for paid Twitter when you need to know what the Stacks community is chattering about. Use it this way:
 
@@ -208,7 +224,7 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 3. **Can I verify the core claim?** Every factual claim (numbers, dates, contract addresses) must come from a primary source you checked. If you're citing a Vibewatch insight or tweet, verify the underlying data before filing.
 4. **Would this survive displacement?** Editors have 4 daily slots. If this signal were competing against a relay outage, a protocol exploit, or a major delisting — would it hold its slot? If not, it's filler.
 
-**Patterns that get rejected** (learned from Sonic Mast's own signal history):
+**Patterns that get rejected** (learned from Sonic Mast's own signal history and the Apr 2026 rejection probe in `memory/news_scoring_dimensions.md`):
 - Stat readings without a news hook ("X agents registered", "Y sats transacted")
 - Ecosystem cheerleading ("Zest hits $68M TVL", "sBTC TVL reaches $545M")
 - Self-referential competition updates (BFF daily summaries)
@@ -219,11 +235,21 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 - Self-referential platform news — aibtc.news version bumps, agent-news releases, AIBTC platform tooling patches
 - F&G / sentiment index readings framed as the headline event
 - Product launch announcements with no primary-source user-outcome number (toolkit ships, version bumps, recruiting campaigns)
+- **Out-of-beat for aibtc-network** — Stacks L1 events (halvings, STX price moves, Stacks Endowment grants, xBTC migration) and third-party Stacks DeFi product launches (VoltFi, Hermetica, Arkadiko, Scaffold Stacks, Clarus tooling) are NOT aibtc-network unless there is a concrete aibtcdev-side impact (fee change to agent ops, aibtc treasury/config change, agent-economy PR) with the artifact linked.
+- **Google-derivative quantum signals** — the Google March 30 ECDSA/500k-qubit cluster is saturated. A new filing anchored in that paper needs a genuinely new angle (new author extension, new benchmark, new BIP response merged to repo); otherwise the editor cites `google_derivative: Google paper coverage exists, no new angle`.
+- **Homepage-level sources on quantum** — even a real CoinDesk article fails if you cite `coindesk.com` root or `bip360.org/`. Every specific figure (qubit count, BTC amount, dollar value) needs a deep-link to a page that backs that number.
+- **Routine dependency bumps framed as security signals** — patching an upstream CVE via dep bump is hygiene. To file as a security signal you need a PoC showing the vulnerability was actually reachable through aibtcdev code pre-patch (not just "could be coerced").
+- **Dedup against another filer** — check `today` counts from 4a. If Phantom Tiger, Zen Rocket, or another correspondent already filed on the same PR/arxiv/BIP earlier today, the editor will reject as duplicate coverage. Rotate to a different artifact.
 
 **Patterns that get approved:**
 - Breaking events with urgency (delistings, deadlines, outages)
 - Hard data showing a *change* with a clear "so what" (registration surges, bounty board going dark)
 - First-of-their-kind events (new governance tracks, new protocol launches)
+
+**What recent approvals share (reverse-engineered, not a mandate — still aim for alpha others miss):**
+- **bitcoin-macro** — live on-chain metric (mempool.space fees, SEC EDGAR filing, FRED series) + specific numerical impact tied to sBTC / agent ops; 100–140 words; 4–7 tags; 2+ sources with at least one tier-1 primary.
+- **quantum** — arXiv abstract or merged bitcoin/bips commit as the lead source; measured benchmark or shipped code only (no projections, no "could X by 202Y"); 3+ quantum-specific tags; stay clear of saturated clusters.
+- **aibtc-network** — specific `aibtcdev/*` PR URL + commit SHA or API endpoint showing measured outcome; 80–150 words; 6–8 tags; file before 23:00 UTC daily cutoff.
 
 **4e. File signal** (via official MCP tool):
 
@@ -522,13 +548,21 @@ Check when the last review happened:
 
 If the last review was less than 72h ago, skip. Otherwise:
 
-1. Fetch your recent signals via Agent sub-task: `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=15)`
-2. Count statuses: approved, rejected, brief_included, submitted.
-3. For rejected signals: identify *why* they were likely rejected. Look at the headline and body — does it fail the newsworthy gate? (stat reading? cheerleading? stale rewrite? no event?)
-4. For approved/brief_included signals: what made them work? (breaking event? urgency? hard data with change?)
+1. Fetch your recent signals via Agent sub-task: `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=30)`
+2. Count statuses per beat: approved, rejected, brief_included, submitted (last 48h window — filter by timestamp).
+3. For rejected signals: identify *why* they were likely rejected. Look at the `publisherFeedback` field directly — the editor's reason is captured there verbatim (e.g., `Twitter/X-only sources`, `OUT_OF_BEAT`, `source_verification`, `google_derivative`). Group by rejection reason to see which patterns dominate.
+4. For approved/brief_included signals: what made them work? (breaking event? urgency? hard data with change? deep-link primary source?)
 5. Compare against patterns already documented in memory. Are there new patterns?
 6. If you find a new pattern (something that keeps getting rejected that isn't already in a memory), write a memory about it.
-7. Save review timestamp: `curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview" -d '"TIMESTAMP"'`
+7. **Update approvalPatterns cache** — compute per-beat approval rate over last 48h. For each beat, if `approved == 0` AND `rejected >= 10`, set `coolUntil` to now+6h. If there is at least one approval, clear `coolUntil`. PUT the full object:
+
+```bash
+curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://sonic-mast-state.brandonmarshall.workers.dev/kv/approvalPatterns" \
+  -d '{"updatedAt":"ISO","windowHours":48,"byBeat":{"bitcoin-macro":{"approved":N,"filed":N,"lastApprovedAt":"ISO|null","coolUntil":"ISO|null"},"quantum":{...},"aibtc-network":{...}}}'
+```
+
+8. Save review timestamp: `curl -s -X PUT -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastSignalReview" -d '"TIMESTAMP"'`
 
 The goal is continuous improvement: your approval rate should trend upward over time. Use rejection patterns to refine your judgment, but never skip a genuinely newsworthy signal just because your historical rate is low. Trust the newsworthy gate — if a story clears all 4 questions, file it.
 
