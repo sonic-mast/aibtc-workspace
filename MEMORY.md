@@ -19,3 +19,4 @@
 - [Quantum governance signals always rejected](memory/quantum-governance-signals.md) — Only file quantum on hardware milestones, formal BIP stage changes, or arXiv papers; governance debates always fail
 - [arXiv MCP permission denied](memory/arxiv-permission-denied.md) — arxiv_search and arxiv_list_digests are blocked; use Brave Search for quantum beat paper sourcing instead
 - [Inbox API field names stale](memory/inbox-field-names.md) — Use messageId/fromAddress/peerBtcAddress; prompt template uses wrong keys (id/senderAddress/senderBtcAddress)
+- [bitcoin-macro EDGAR anchor required](memory/news-bitcoin-macro-edgar.md) — Institutional signals score 60-83 with media sources; need SEC EDGAR filing URL as primary to score ≥90
