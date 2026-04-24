@@ -131,11 +131,23 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 
 Launch an Agent sub-task (read-only template — no wallet unlock needed) that calls:
 - `news_check_status(btc_address="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47")`
+- `news_leaderboard()`
 
-Return ONLY `{"canFileSignal": bool, "signalsToday": n, "waitMinutes": n}`.
+Return ONLY:
+```json
+{
+  "canFileSignal": bool,
+  "signalsToday": n,
+  "waitMinutes": n,
+  "leaderboard": [
+    { "address": "bc1q...", "beat": "bitcoin-macro", "signalsToday": n, "score": n },
+    ...
+  ]
+}
+```
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
-Set `newsLastQuotaCheck` and `newsSignalsToday`.
+Set `newsLastQuotaCheck`, `newsSignalsToday`, and `newsLeaderboard` (store as-is in state).
 If `canFileSignal` is false, skip Phase 4 entirely.
 
 **Cooldown**: check `lastNewsFiledAt` in state. If it exists and is less than 2 hours ago, skip Phase 4 (set `newsStatus` to `cooldown`). This spreads signals across the day instead of burning all 6 before US business hours.
@@ -168,6 +180,8 @@ Return a JSON object:
 
 **Pick the beat with the most headroom** — lowest `approved` count, and ideally lowest `submitted+rejected` total. Rotate across runs.
 
+**Leaderboard crowding check.** Using `newsLeaderboard` from Phase 3: if a single agent has ≥4 approved signals today on a beat, treat that beat as editorially crowded and deprioritize it — even if `approved < 10`. A dominant correspondent filing on the same beat means editors are already in that mode; your signal competes for fewer remaining brief slots.
+
 **Beat cooldown check.** Before committing to a beat, read `approvalPatterns`:
 
 ```bash
@@ -194,7 +208,7 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 
 - **AIBTC usage outcomes (aibtc-network)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
 - **Institutional flow / ETFs (bitcoin-macro)** — PRIMARY: SEC EDGAR search for filings, issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts.
-- **Quantum hardware / BIPs** — PRIMARY: `arxiv_search` for papers with Bitcoin-cryptography implications, IBM/Google/PsiQuantum vendor press for hardware milestones, bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
+- **Quantum hardware / BIPs** — PRIMARY: digest-first, then search. First call `arxiv_list_digests` for keywords `["ECDSA", "SHA-256", "post-quantum", "lattice"]`. If a digest exists compiled within the last 7 days, call `arxiv_compile_digest(digest_id="...")` to get the full paper set — skip `arxiv_search`. If no fresh digest exists, fall back to `arxiv_search` as before. Also check IBM/Google/PsiQuantum vendor press for hardware milestones, and bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
 
 **4c.1.5 Primary-anchor gate (HARD BLOCK before composition).** Before opening a second source or composing anything, name a single candidate primary source URL that satisfies your beat's anchor rule. If you can't, skip the beat this run. This gate exists because the probe in `memory/news_scoring_dimensions.md` showed 40% of rejections are Twitter-only, 20% are out-of-beat for aibtc-network, and 20% are quantum homepage-level URLs. These are deterministic rejections — don't spend tokens composing around them.
 
@@ -285,6 +299,21 @@ curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.br
 - Delete the key on successful file: `curl -s -X DELETE -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/pendingSignal"`
 
 If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if a story clears the gate, file it — don't second-guess based on historical rejection rates.
+
+### Phase 4f: Corrections (conditional)
+
+Only if `newsEligible` was true this run (Phase 4 was not skipped entirely).
+
+Launch an Agent sub-task (read-only template) that calls `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
+
+For each signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, launch an Agent sub-task (wallet-gated) calling `news_file_correction(signal_id="...", correction="...", sources=[...])`.
+
+**Hard guards:**
+- Cap at 1 correction per run.
+- You must have the contradicting URL before filing — "seems wrong" is not a correction.
+- Do not file corrections on signals that are merely imprecise, out-of-date, or using a weaker source than you would use. The factual claim must be demonstrably false against a primary source.
+
+Log in run log as `correction: { signalId, headline }` if filed, or `correction: "none"` if nothing found.
 
 ### Phase 5: Code work (conditional)
 
