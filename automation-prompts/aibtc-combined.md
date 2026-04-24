@@ -370,7 +370,7 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
    export DIFF="$(git diff --no-color HEAD -- skills/{skill-name}/)"
    ```
 3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
-4. Call Gemini with structured output. Round counter starts at 1, cap at 2. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome. `GEMINI_API_KEY` must already be exported in the session (it's in `.env`; the combined-task runner sources it at startup). If in doubt, `export GEMINI_API_KEY` before the call.
+4. Call Gemini with structured output. **Up to 2 total review rounds per gate invocation**: round 1 is the initial review; if it finds bugs, apply fixes and run round 2 as a confirmation pass. If round 2 still finds bugs, stop. Round counter starts at 1. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome. `GEMINI_API_KEY` must already be exported in the session (it's in `.env`; the combined-task runner sources it at startup). If in doubt, `export GEMINI_API_KEY` before the call.
    ```bash
    REVIEW=$(python3 <<'PY'
    import json, os, sys, urllib.request
@@ -412,9 +412,9 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
    )
    ```
 5. Parse `$REVIEW` as JSON.
-   - If the result is an object with `__error__` (network failure, 4xx/5xx, quota exceeded, etc.) → `localReviewResult="api-error"`, `detail` = the `__error__` string, return.
-   - If any `severity:"bug"` items: read the affected files, apply the suggested fix where it's correct (Gemini's `fix` field is guidance, not a literal patch — verify against the code). Then re-run from step 2, incrementing the round counter.
-   - At round 3 (cap hit) with remaining bugs: `localReviewResult="max-rounds", remaining=N`, return. Post-PR `gemini-code-assist[bot]` catches what's left.
+   - If the result is an object with `__error__` (network failure, 4xx/5xx, quota exceeded, empty candidates from safety filter, etc.) → `localReviewResult="api-error"`, `detail` = the `__error__` string, return.
+   - If any `severity:"bug"` items **and round == 1**: read the affected files, apply the suggested fix where it's correct (Gemini's `fix` field is guidance, not a literal patch — verify against the code). Increment the round counter to 2 and re-run from step 2.
+   - If any `severity:"bug"` items **and round == 2** (cap hit — the round-1 fixes didn't fully clear the findings): `localReviewResult="max-rounds", remaining=N`, return. Post-PR `gemini-code-assist[bot]` catches what's left.
    - `severity:"risk"` items: collect into a `reviewRiskNotes` array to append under a **Pre-review notes** section in the PR body (same treatment as `ANALYSIS_`).
    - Clean (`[]`): `localReviewResult="clean"`, return.
 6. Rules:
