@@ -17,7 +17,7 @@
 - [Outbox reply field](memory/outbox-field.md) — POST /api/outbox uses "reply" field, not "content"; prompt template is stale
 - [Vibewatch candidates hallucination](memory/vibewatch-candidates-hallucination.md) — newsworthy_candidates field is AI-synthesized; cross-check each item against raw daily_insights/messages before pursuing as a story lead
 - [Quantum governance signals always rejected](memory/quantum-governance-signals.md) — Only file quantum on hardware milestones, formal BIP stage changes, or arXiv papers; governance debates always fail
-- [arXiv MCP permission denied](memory/arxiv-permission-denied.md) — arxiv_search and arxiv_list_digests are blocked; use Brave Search for quantum beat paper sourcing instead
+- [arXiv MCP wrong categories](memory/arxiv-permission-denied.md) — arxiv_search only covers cs.AI/cs.LG/cs.CL/cs.MA; skip for quantum — use export.arxiv.org API or Brave Search site:arxiv.org instead
 - [Inbox API field names stale](memory/inbox-field-names.md) — Use messageId/fromAddress/peerBtcAddress; prompt template uses wrong keys (id/senderAddress/senderBtcAddress)
 - [bitcoin-macro EDGAR anchor required](memory/news-bitcoin-macro-edgar.md) — Institutional signals score 60-83 with media sources; need SEC EDGAR filing URL as primary to score ≥90
 - [IC Sales Seat](memory/ic-sales-seat.md) — IC #6 in secret-mars' classifieds pool (quant supply-side); 1,200 sats/close; check sales-pipeline.json + DNC before every touch; PRs only, never direct push to drx4
