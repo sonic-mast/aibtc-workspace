@@ -364,13 +364,16 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
 **Never blocks shipping.** Every failure mode (no key, API error, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
 
 1. If `$GEMINI_API_KEY` is empty: set `localReviewResult="no-key"` and return (push proceeds without review).
-2. Build the diff from the working tree:
-   `DIFF=$(git diff --no-color HEAD -- skills/{skill-name}/)`
-3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
-4. Call Gemini with structured output. Round counter starts at 1, cap at 2.
+2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files):
    ```bash
-   REVIEW=$(python3 <<'PY' 2>/dev/null
-   import json, os, subprocess, sys, urllib.request
+   git add -N skills/{skill-name}/ 2>/dev/null
+   DIFF=$(git diff --no-color HEAD -- skills/{skill-name}/)
+   ```
+3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
+4. Call Gemini with structured output. Round counter starts at 1, cap at 2. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome.
+   ```bash
+   REVIEW=$(python3 <<'PY'
+   import json, os, sys, urllib.request
    diff = os.environ["DIFF"]
    payload = {
      "contents": [{"parts": [{"text": diff}]}],
@@ -399,12 +402,12 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
        data = json.load(r)
      print(data["candidates"][0]["content"]["parts"][0]["text"])
    except Exception as e:
-     print(f'{{"__error__": "{type(e).__name__}: {e}"}}', file=sys.stderr); sys.exit(1)
+     print(json.dumps({"__error__": f"{type(e).__name__}: {e}"}))
    PY
    )
    ```
 5. Parse `$REVIEW` as JSON.
-   - On parse/API error → `localReviewResult="api-error"`, include `detail` from stderr, return.
+   - If the result is an object with `__error__` (network failure, 4xx/5xx, quota exceeded, etc.) → `localReviewResult="api-error"`, `detail` = the `__error__` string, return.
    - If any `severity:"bug"` items: read the affected files, apply the suggested fix where it's correct (Gemini's `fix` field is guidance, not a literal patch — verify against the code). Then re-run from step 2, incrementing the round counter.
    - At round 3 (cap hit) with remaining bugs: `localReviewResult="max-rounds", remaining=N`, return. Post-PR `gemini-code-assist[bot]` catches what's left.
    - `severity:"risk"` items: collect into a `reviewRiskNotes` array to append under a **Pre-review notes** section in the PR body (same treatment as `ANALYSIS_`).
