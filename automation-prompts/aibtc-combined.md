@@ -460,10 +460,12 @@ Then check for open bounties (higher value):
 `curl -s "https://aibtc.com/api/bounty" | python3 -c "import sys,json; d=json.load(sys.stdin); bounties=[b for b in d if b.get('status')=='open']; print(json.dumps({'count':len(bounties),'bounties':[{'id':b['id'],'title':b['title'],'reward':b.get('reward')} for b in bounties[:3]]}))" 2>/dev/null || echo '{"count":0}'`
 
 If bounties exist, pick one. Otherwise, check BFF Skills Competition:
-- Read `reference/bff.army/agents.txt` for current day number and rules.
-- If competition is still running, plan a new WRITE skill. Pick something useful for the AIBTC agent economy — DeFi execution, wallet primitives, identity/signing, payments infrastructure.
+- **Always fetch live rules first**: `curl -sL "https://bff.army/agents.txt" > reference/bff.army/agents.txt` then read the file for current day number. Never use a cached copy — the day number changes daily and stale copies will produce wrong PR labels.
+- If competition is still running, plan a new WRITE skill.
+- **HODLMM integration is the priority**. The $100 HODLMM quality bonus is only awarded for skills that directly integrate HODLMM. Most daily winners also use HODLMM. Always check whether your candidate skill can use HODLMM (pool operations, bin management, liquidity moves, arb, signal-gated execution). If a natural HODLMM angle exists, take it. Only skip HODLMM if it genuinely doesn't fit the skill.
 - **Before choosing a skill idea**: read 1-2 existing skills from upstream to understand the codebase patterns. At minimum read the DCA skill (`skills/dca/dca.ts`) since it shows correct Bitflow SDK usage.
 - Check existing PRs (open and closed) on `sonic-mast/bff-skills` to avoid duplicating past work.
+- Check open PRs on `BitflowFinance/bff-skills` to avoid crowded ideas (if 3+ agents already submitted the same concept this cycle, pick something else).
 - Check existing skills on upstream to avoid building something that already exists.
 
 If neither bounties nor competition are active, set `codeWork.status` to `none` and skip.
@@ -483,6 +485,7 @@ For BFF skills:
 5. Skills must be WRITE skills (execute transactions, not read-only).
 6. **Verify all contract addresses exist on mainnet** before committing: `curl -s "https://api.hiro.so/extended/v1/contract/{address}.{name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('EXISTS' if 'tx_id' in d else 'NOT FOUND:', d.get('error',d.get('tx_id',''))[:80])"`
 7. Run the skill's `doctor` command to verify it works.
+7a. **Capture on-chain proof** — Execute the skill with a small real amount and `--confirm` flag to produce at least one on-chain transaction. Record the tx hash. Competition rules are explicit: "no proof = reviewed last." Without a tx hash, the PR will not win.
 8. **Run the pre-push review gate** (see "Pre-push review gate (Gemini API)" above). Apply any `bug`-severity fixes in place, collect `risk` items for the PR body. Record `localReviewResult` for the run log.
 9. Push the three skill files to `skill/{skill-name}` on the fork. Env-branch per CRITICAL rule 13:
    - **Local**: `git add skills/{skill-name} && git commit -m "feat({skill-name}): add {skill-name} skill" && git push -u origin skill/{skill-name}`.
@@ -490,7 +493,7 @@ For BFF skills:
 10. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
     Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
     Base branch: `main`. Head branch: `skill/{skill-name}`.
-11. Use the PR body format above. Include submission history (Sonic Mast previous PRs: #224, #225 closed). If the gate produced `reviewRiskNotes`, append them under a **Pre-review notes** section in the PR body.
+11. Use the PR body format above. Include the on-chain proof tx hash under "On-chain proof". If the gate produced `reviewRiskNotes`, append them under a **Pre-review notes** section in the PR body.
 12. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
