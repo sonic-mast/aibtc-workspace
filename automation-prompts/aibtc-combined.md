@@ -364,13 +364,13 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
 **Never blocks shipping.** Every failure mode (no key, API error, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
 
 1. If `$GEMINI_API_KEY` is empty: set `localReviewResult="no-key"` and return (push proceeds without review).
-2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files):
+2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files). **Export** `DIFF` so the Python heredoc (a child process) can read it via `os.environ`:
    ```bash
    git add -N skills/{skill-name}/ 2>/dev/null
-   DIFF=$(git diff --no-color HEAD -- skills/{skill-name}/)
+   export DIFF="$(git diff --no-color HEAD -- skills/{skill-name}/)"
    ```
 3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
-4. Call Gemini with structured output. Round counter starts at 1, cap at 2. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome.
+4. Call Gemini with structured output. Round counter starts at 1, cap at 2. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome. `GEMINI_API_KEY` must already be exported in the session (it's in `.env`; the combined-task runner sources it at startup). If in doubt, `export GEMINI_API_KEY` before the call.
    ```bash
    REVIEW=$(python3 <<'PY'
    import json, os, sys, urllib.request
@@ -400,7 +400,12 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
    try:
      with urllib.request.urlopen(req, timeout=60) as r:
        data = json.load(r)
-     print(data["candidates"][0]["content"]["parts"][0]["text"])
+     cands = data.get("candidates") or []
+     if not cands:
+       # safety filter / empty generation — treat as clean rather than crashing
+       print(json.dumps({"__error__": f"no-candidates: {data.get('promptFeedback', {})}"}))
+     else:
+       print(cands[0]["content"]["parts"][0]["text"])
    except Exception as e:
      print(json.dumps({"__error__": f"{type(e).__name__}: {e}"}))
    PY
