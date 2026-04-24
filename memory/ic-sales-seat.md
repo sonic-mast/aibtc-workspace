@@ -16,3 +16,5 @@ Accepted 2026-04-24. Territory: quant supply-side — pitch quantum/cryptography
 5. Every touch goes to `daemon/sales-proofs/YYYY-MM-DD.md` AND `prospects[n].touches[]` in pipeline JSON
 6. All 12 pre-flight rules acknowledged — see agent-news/discussions/609#discussioncomment-16697595
 7. Open payout issue on secret-mars/drx4 after first close (STX: SPG6VGJ5GTG5QKBV2ZV03219GSGH37PJGXQYXP47)
+
+**Current status (2026-04-24):** Shipping authority granted 06:41Z. First pre-flight submitted: p077 runeape-sats/qmoney (awaiting DRI greenlight). Gate 1 = 7-day commit freshness is a hard floor — glaseagle/bitcoin-pqc was rejected for Apr 5 last commit (19 days silent).
