@@ -64,6 +64,7 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 | `BRAVE_API_KEY` | Brave Search API (budget: $5/month) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot for daily digest |
 | `TELEGRAM_CHAT_ID` | Operator's Telegram chat ID |
+| `GEMINI_API_KEY` | Pre-push code review gate (AI Studio key, `gemini-2.5-flash`). Free tier covers volume. |
 
 ## MCP Servers
 
