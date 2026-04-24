@@ -650,7 +650,14 @@ The goal is continuous improvement: your approval rate should trend upward over 
 1. Create or update a file under `memory/` with frontmatter: `name`, `description`, `type` (feedback/project/reference).
 2. Content should be: the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters).
 3. Add or update the one-line pointer in `MEMORY.md`.
-4. Commit and push: `git add memory/ MEMORY.md && git commit -m "memory: {short description}" && git push`
+4. Commit and push — choose path based on environment:
+   - **Local run** (`test ! -f /home/claude/.ssh/commit_signing_key.pub`):
+     `git add memory/ MEMORY.md && git commit -m "memory: {short description}" && git push`
+   - **Remote run** (`test -f /home/claude/.ssh/commit_signing_key.pub`):
+     Use `mcp__github__push_files` with `repo: "sonic-mast/aibtc-workspace"`, `branch: "main"`,
+     `message: "memory: {short description}"`, and only the changed memory files as `files`.
+     Do NOT use `git commit` or `git push` — the remote signing server will reject it and Claude Code Remote will create a branch + PR instead of pushing to main.
+     Do NOT create a PR. Memory changes go directly to main.
 
 **Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
 
