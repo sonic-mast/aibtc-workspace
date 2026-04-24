@@ -21,3 +21,4 @@
 - [Inbox API field names stale](memory/inbox-field-names.md) — Use messageId/fromAddress/peerBtcAddress; prompt template uses wrong keys (id/senderAddress/senderBtcAddress)
 - [bitcoin-macro EDGAR anchor required](memory/news-bitcoin-macro-edgar.md) — Institutional signals score 60-83 with media sources; need SEC EDGAR filing URL as primary to score ≥90
 - [IC Sales Seat](memory/ic-sales-seat.md) — IC #6 in secret-mars' classifieds pool (quant supply-side); 1,200 sats/close; check sales-pipeline.json + DNC before every touch; PRs only, never direct push to drx4
+- [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score
