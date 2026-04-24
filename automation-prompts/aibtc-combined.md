@@ -357,6 +357,62 @@ Use the `.github/PULL_REQUEST_TEMPLATE.md` from the repo:
 {write operations, fund limits, confirmation gates}
 ```
 
+#### Pre-push review gate (Gemini API)
+
+Runs from 5b (before initial push) and 5d (before fix push). Acts as a replacement for the Devin post-PR review, which is losing its free tier. Uses the Gemini HTTP API so the same gate runs on local and remote Claude Code — no CLI dependency.
+
+**Never blocks shipping.** Every failure mode (no key, API error, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
+
+1. If `$GEMINI_API_KEY` is empty: set `localReviewResult="no-key"` and return (push proceeds without review).
+2. Build the diff from the working tree:
+   `DIFF=$(git diff --no-color HEAD -- skills/{skill-name}/)`
+3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
+4. Call Gemini with structured output. Round counter starts at 1, cap at 2.
+   ```bash
+   REVIEW=$(python3 <<'PY' 2>/dev/null
+   import json, os, subprocess, sys, urllib.request
+   diff = os.environ["DIFF"]
+   payload = {
+     "contents": [{"parts": [{"text": diff}]}],
+     "systemInstruction": {"parts": [{"text":
+       "You are reviewing a BFF skills PR for AIBTC. Focus ONLY on these failure modes — skip style/nitpicks:\n"
+       "1. Fabricated contract addresses or API URLs (cite the address and why it looks unverified).\n"
+       "2. Safety claims in AGENT.md not enforced in the .ts code.\n"
+       "3. Write operations missing the --confirm gate.\n"
+       "4. MCP payloads missing postConditionMode:deny or per-token post-conditions.\n"
+       "5. Bare fetch() without AbortSignal.timeout.\n"
+       "6. Hardcoded contract calls that should use a protocol SDK.\n"
+       "7. Actual logic bugs (off-by-one, wrong operator, swapped args, missing await).\n"
+       "Return a JSON array; empty array [] if clean."}]},
+     "generationConfig": {
+       "responseMimeType": "application/json",
+       "responseSchema": {"type": "array", "items": {"type": "object",
+         "properties": {"severity": {"type": "string", "enum": ["bug", "risk"]},
+           "file": {"type": "string"}, "line": {"type": "integer"},
+           "issue": {"type": "string"}, "fix": {"type": "string"}},
+         "required": ["severity", "file", "issue"]}}}}
+   req = urllib.request.Request(
+     f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={os.environ['GEMINI_API_KEY']}",
+     data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+   try:
+     with urllib.request.urlopen(req, timeout=60) as r:
+       data = json.load(r)
+     print(data["candidates"][0]["content"]["parts"][0]["text"])
+   except Exception as e:
+     print(f'{{"__error__": "{type(e).__name__}: {e}"}}', file=sys.stderr); sys.exit(1)
+   PY
+   )
+   ```
+5. Parse `$REVIEW` as JSON.
+   - On parse/API error → `localReviewResult="api-error"`, include `detail` from stderr, return.
+   - If any `severity:"bug"` items: read the affected files, apply the suggested fix where it's correct (Gemini's `fix` field is guidance, not a literal patch — verify against the code). Then re-run from step 2, incrementing the round counter.
+   - At round 3 (cap hit) with remaining bugs: `localReviewResult="max-rounds", remaining=N`, return. Post-PR `gemini-code-assist[bot]` catches what's left.
+   - `severity:"risk"` items: collect into a `reviewRiskNotes` array to append under a **Pre-review notes** section in the PR body (same treatment as `ANALYSIS_`).
+   - Clean (`[]`): `localReviewResult="clean"`, return.
+6. Rules:
+   - **Do not re-verify fabricated addresses by asking Gemini again.** If rule #1 fires, go verify on Hiro (`api.hiro.so/extended/v1/contract/{address}.{name}`) and either replace the address or fail back to a known-good one. Re-checking Gemini won't fix hallucination on your end.
+   - **Do not mutate `codeWork` state from the gate.** The gate lives entirely within one run.
+
 **5a. Status: `none` — Pick work**
 
 First, close any stale open PRs on `sonic-mast/bff-skills`:
@@ -390,14 +446,15 @@ For BFF skills:
 5. Skills must be WRITE skills (execute transactions, not read-only).
 6. **Verify all contract addresses exist on mainnet** before committing: `curl -s "https://api.hiro.so/extended/v1/contract/{address}.{name}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('EXISTS' if 'tx_id' in d else 'NOT FOUND:', d.get('error',d.get('tx_id',''))[:80])"`
 7. Run the skill's `doctor` command to verify it works.
-8. Push the three skill files to `skill/{skill-name}` on the fork. Env-branch per CRITICAL rule 13:
+8. **Run the pre-push review gate** (see "Pre-push review gate (Gemini API)" above). Apply any `bug`-severity fixes in place, collect `risk` items for the PR body. Record `localReviewResult` for the run log.
+9. Push the three skill files to `skill/{skill-name}` on the fork. Env-branch per CRITICAL rule 13:
    - **Local**: `git add skills/{skill-name} && git commit -m "feat({skill-name}): add {skill-name} skill" && git push -u origin skill/{skill-name}`.
    - **Remote**: skip `git commit` — call `mcp__github__push_files` with `owner=sonic-mast`, `repo=bff-skills`, `branch=skill/{skill-name}`, `message="feat({skill-name}): add {skill-name} skill"`, and the three file paths/contents in `files`. Do not attempt local signing first; it will fail and burn the turn.
-9. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
-   Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
-   Base branch: `main`. Head branch: `skill/{skill-name}`.
-10. Use the PR body format above. Include submission history (Sonic Mast previous PRs: #224, #225 closed).
-11. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
+10. Open PR to `sonic-mast/bff-skills` (the fork, NOT upstream). Devin/Gemini review is configured on the fork.
+    Title: `[AIBTC Skills Comp Day {X}] {Skill Name}`
+    Base branch: `main`. Head branch: `skill/{skill-name}`.
+11. Use the PR body format above. Include submission history (Sonic Mast previous PRs: #224, #225 closed). If the gate produced `reviewRiskNotes`, append them under a **Pre-review notes** section in the PR body.
+12. Set `status` to `awaiting-review`, save `prNumber`, `prUrl`, `repo` (= `sonic-mast/bff-skills`), `branch`.
 
 For bounties: follow bounty-specific submission flow. Same state machine applies.
 
@@ -462,12 +519,13 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
 4. **Re-verify contract addresses** if any were flagged. Do not fix a fabricated address with another fabricated address.
-5. Push the fix to the same branch. Env-branch per CRITICAL rule 13:
+5. **Run the pre-push review gate** (see "Pre-push review gate (Gemini API)" above) against the working tree before pushing the fix. This catches regressions introduced by the fix itself. Apply any new `bug`-severity findings.
+6. Push the fix to the same branch. Env-branch per CRITICAL rule 13:
    - **Local**: `git add <changed-files> && git commit -m "fix({skill-name}): <short reason>" && git push`.
    - **Remote**: skip `git commit` — call `mcp__github__push_files` with the same owner/repo/branch from state and the fixed file contents. A bare `git commit` in remote returns `signing operation failed: ... 400 missing source` and then stream-idle-timeouts on the MCP pivot — go straight to MCP.
    Both bots will automatically re-review on new commits either way.
-6. Set `status` back to `awaiting-review`, update `lastActionAt`.
-7. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
+7. Set `status` back to `awaiting-review`, update `lastActionAt`.
+8. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
 **5e. Status: `submitting` — Update fork PR and open upstream PR**
 
