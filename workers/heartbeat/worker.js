@@ -45,7 +45,6 @@ export default {
           lastHeartbeat: state.lastHeartbeatAt,
           unreadCount: state.unreadCount,
           newsSignalsToday: state.newsSignalsToday,
-          x402Health: state.x402Health ?? null,
         });
       } catch {
         return Response.json({
@@ -117,20 +116,6 @@ async function getCachedKey(env) {
   return derived;
 }
 
-async function probeX402(url) {
-  if (!url) return "unconfigured";
-  try {
-    const resp = await fetch(url, {
-      method: "GET",
-      signal: AbortSignal.timeout(5000),
-    });
-    // x402 endpoints return 402 when alive and awaiting payment
-    return resp.status === 402 ? "ok" : `degraded:${resp.status}`;
-  } catch (e) {
-    return `degraded:${e.message?.slice(0, 40) ?? "timeout"}`;
-  }
-}
-
 async function doHeartbeat(env) {
   // 1. Get key material (cached in KV to avoid expensive PBKDF2 on every run)
   const { privateKey, address, publicKey, scriptPubKey } = await getCachedKey(env);
@@ -176,18 +161,7 @@ async function doHeartbeat(env) {
     }
   } catch { /* non-fatal — keep 0 */ }
 
-  // 6. Probe x402 oracle endpoints (X402_PRICE_URL, X402_MACRO_URL env vars)
-  const [priceStatus, macroStatus] = await Promise.all([
-    probeX402(env.X402_PRICE_URL),
-    probeX402(env.X402_MACRO_URL),
-  ]);
-  const x402Health = {
-    price: priceStatus,
-    macro: macroStatus,
-    checkedAt: timestamp,
-  };
-
-  // 7. Update state API via Service Binding (direct Worker-to-Worker, no public URL needed)
+  // 6. Update state API via Service Binding (direct Worker-to-Worker, no public URL needed)
   const authHeaders = {
     "Authorization": `Bearer ${env.STATE_API_TOKEN}`,
     "Content-Type": "application/json"
@@ -202,7 +176,6 @@ async function doHeartbeat(env) {
       const current = await getResp.json();
       current.lastHeartbeatAt = timestamp;
       current.unreadCount = inboxUnread;
-      current.x402Health = x402Health;
       const putResp = await stateWorker.fetch("https://state/state", {
         method: "PUT",
         headers: authHeaders,
@@ -221,7 +194,6 @@ async function doHeartbeat(env) {
     checkInCount: data.orientation?.checkInCount,
     level: data.orientation?.levelName,
     unread: inboxUnread,
-    x402Health,
     stateUpdate: stateStatus,
     timestamp
   };

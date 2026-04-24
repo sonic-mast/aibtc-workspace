@@ -9,6 +9,3 @@ service = "sonic-mast-state"
 
 [triggers]
 crons = ["*/15 * * * *"]
-
-# x402 oracle endpoint URLs — set via `wrangler secret put X402_PRICE_URL` and `wrangler secret put X402_MACRO_URL`
-# If unset, x402 health probe is skipped (reported as "unconfigured" in state).

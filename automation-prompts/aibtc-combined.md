@@ -50,7 +50,7 @@ Make tool calls immediately. No narration between steps.
 ### Phase 1: Read state and check inbox
 
 1. Read state from state API.
-2. Check `unreadCount` from state (updated by heartbeat worker). Also check `x402Health` — if `price` or `macro` is not `"ok"` and not `"unconfigured"`, include `x402: "degraded"` in the run log line.
+2. Check `unreadCount` from state (updated by heartbeat worker).
 3. Count the number of **actionable** pending items: `pendingReplyIds` entries whose `replyStatus` is NOT `blocked_missing_sender_btc` (blocked items don't count — they will be drained in Phase 2). If `unreadCount > 0` AND actionable count < 3:
    - Fetch unread inbox (extract only what's needed for queuing):
      `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47?status=unread" | python3 -c "import sys,json; d=json.load(sys.stdin); msgs=d.get('inbox',{}).get('messages',[]); [print(json.dumps({k:m.get(k) for k in ['id','senderAddress','senderBtcAddress','content']})) for m in msgs[:3]]"`
