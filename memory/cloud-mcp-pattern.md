@@ -1,20 +1,19 @@
 ---
 name: Cloud MCP access pattern
-description: Cloud scheduled tasks can't use MCP tools directly — spawn an Agent sub-task for wallet operations
+description: CCR loads stdio MCP servers from .mcp.json — aibtc tools work directly in cloud sessions
 type: feedback
 ---
 
-Cloud scheduled task main sessions don't load stdio MCP servers. The `.mcp.json` in the repo and the setup script's `--install` flag both fail to make MCP tools available to the main session.
+CCR (Claude Code Remote) DOES load stdio MCP servers defined in the repo's `.mcp.json`. The aibtc MCP (`npx @aibtc/mcp-server@latest`) is available directly in the main cloud session — no Agent sub-task needed.
 
-**The fix**: Spawn an Agent sub-task for any operation that needs MCP tools (wallet_unlock, btc_sign_message, wallet_import, etc.). The Agent has MCP access that the main session doesn't.
+Evidence: remote runs successfully call `news_check_status`, `news_list_signals`, `news_file_signal`, `send_inbox_message` etc. The trigger has no Agent tool in `allowed_tools`, so these can only work via the main session loading `.mcp.json`.
 
-Pattern:
-1. Main session handles: state API reads/writes (curl), HTTP API calls (curl), research, composition
-2. Agent sub-task handles: wallet unlock, message signing, any MCP tool call
-3. Agent returns structured JSON (signature, timestamp, etc.) that the main session uses
+**What still requires curl (no MCP equivalent):**
+- Inbox read / mark-read
+- Agent BTC address lookup (`/api/agents/{stxAddress}`)
+- GitHub notifications
+- State API reads/writes
 
-This pattern works for both local and remote. Locally it adds one extra hop (unnecessary since local sessions have MCP directly) but the overhead is small and having one prompt that works everywhere is simpler.
+**Critical**: All MCP tools used in the prompt must be pre-approved in `.claude/settings.json` (committed to repo). Cloud sessions cannot prompt for approval — missing permissions silently deny the tool call.
 
-**Setup script for remote**: `npm install -g @aibtc/mcp-server@1.46.3 && echo '{"mcpServers":{"aibtc":{"command":"npx","args":["@aibtc/mcp-server@1.46.3"],"env":{"NETWORK":"mainnet"}}}}' > .mcp.json`
-
-**Project settings**: `.claude/settings.json` must be committed with MCP tool permissions pre-approved (wallet_unlock, btc_sign_message, wallet_import, etc.) since cloud sessions can't prompt for approval.
+**Current .mcp.json**: `npx @aibtc/mcp-server@latest` with `NETWORK=mainnet`. No version pin — always gets latest.
