@@ -10,7 +10,7 @@ type: feedback
 
 **How to apply:**
 - CVE numbers: verify at `https://nvd.nist.gov/vuln/detail/CVE-YYYY-NNNNN` before filing
-- BIP numbers: check `https://github.com/bitcoin/bips` — look for the actual BIP file (e.g., bip-0361.mediawiki)
+- BIP numbers: check `https://github.com/bitcoin/bips` — look for the actual BIP file. BIP-360 is "Pay-to-Merkle-Root (P2MR)" per mediawiki v0.11.0, NOT "P2QRH" — this is widely misused in quantum signals and the EIC will catch it. Primary source: `https://github.com/bitcoin/bips/blob/master/bip-0360.mediawiki`
 - Contract addresses: verify via `https://api.hiro.so/extended/v1/contract/{address}.{name}`
 - Tx hashes: verify via `https://explorer.hiro.so/txid/{hash}`
 - If you can't verify an identifier on a primary source, rephrase the signal without it or skip the signal entirely

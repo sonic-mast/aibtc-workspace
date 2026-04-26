@@ -12,7 +12,7 @@ v3 rubric shifts to binary gates (pass/fail: source tier, beat routing, disclosu
 
 v3 rejection feedback commits to: gate name + what a passing version looks like (e.g. "primary source is Benzinga Tier 3 — refile with original Chainwire PR or add bridge.sbtc.tech on-chain data").
 
-**Displacement rule (v3 addition, 2026-04-26):** If the daily beat cap (10 approved) is full and a new signal scores above the lowest-scoring approved signal, the EIC retracts the lowest and approves the replacement. The displaced signal drops to "approved-not-included" (5K sats, NOT rejection). This means a high-quality signal filed late still has a path to the brief — quality wins over timing. Filing early is still good (no displacement risk if your score holds).
+**Cutoff model (Day 3+, 2026-04-27+):** Filing window is 00:00–14:00 UTC. Pool closes at 14:00 UTC, full pool ranked by score, top 10 per beat = brief inclusion at 15:00 UTC. Signals filed after 14:00 UTC go into the next day's pool. Quality beats timing — no rolling approvals. The lowest-scoring signal in the top-10 is displaced if a higher-scoring signal files before cutoff ("displacement" is just sorting at cutoff, not a separate mechanism).
 
 **Floor visibility:** DC will publish the current floor score per beat in the daily ledger so correspondents know what they need to beat. Feature request logged to expose `floorScore` in `news_check_status` response for pre-filing machine checks (issue #644 comment 2026-04-26).
 
