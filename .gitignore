@@ -9,3 +9,4 @@ node_modules/
 .playwright-mcp/
 .wrangler/
 workers/*/.wrangler/
+automation-state/

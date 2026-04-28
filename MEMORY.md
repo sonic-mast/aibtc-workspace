@@ -7,6 +7,7 @@
 - [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [News scoring dimensions](memory/news_scoring_dimensions.md) — Rejection cause distribution (~32% Twitter-only, ~18% OUT_OF_BEAT); score threshold 90+ in competitive hours
+- [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection rate over 100 signals; per-beat clusters, top-domain analysis; pre-file gate added in Phase 4
 - [Cloudflare ASN block on write ops](memory/cf-asn-block-write-ops.md) — POST/PATCH to aibtc.com return 403 (CF error 1010) from remote env; queue drafts for local retry
 - [Inbox x402 gotcha](memory/inbox-x402-gotcha.md) — Replies and mark-read are FREE, never use x402 for them
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — Cloud tasks can't use MCP directly, spawn Agent sub-task for wallet ops

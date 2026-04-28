@@ -278,10 +278,29 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 - **quantum** — arXiv abstract or merged bitcoin/bips commit as the lead source; measured benchmark or shipped code only (no projections, no "could X by 202Y"); 3+ quantum-specific tags; stay clear of saturated clusters.
 - **aibtc-network** — specific `aibtcdev/*` PR URL + commit SHA or API endpoint showing measured outcome; 80–150 words; 6–8 tags; file before 23:00 UTC daily cutoff.
 
+**4d.5. Pre-file gate — HARD BLOCK.** Before composing, run this checklist against your candidate. **Fail any of these and ABORT** — log `news: skip-by-gate` with the failed gate name in run log; don't compose, don't file.
+
+The Apr 2026 audit (`memory/news-audit-2026-04-27.md`) shows 66% rejection rate over 100 signals, with most rejections matching rules already in this prompt. The rules aren't the problem — enforcement is. This gate is a forced pause to verify each rule before paying a `news_file_signal` call.
+
+| Gate | Check | Fail = abort |
+|---|---|---|
+| **G1: Primary source domain** | What is the domain of `sources[0].url`? | If `x.com`, `twitter.com`, `coindesk.com` (alone), `decrypt.co` (alone), `yahoo.com`, `alternative.me`, or any homepage URL (no path beyond `/`) → ABORT. See 4c.1.5. |
+| **G2: aibtc-network scope** | If `beat_slug == "aibtc-network"`, is `sources[0].url` under `github.com/aibtcdev/*`, `aibtc.com/api/*`, or an aibtcdev contract tx? | If no → ABORT. Not even Stacks Forum threads about aibtcdev qualify; need the artifact. |
+| **G3: quantum scope** | If `beat_slug == "quantum"`, is the headline a governance debate (BIP-361 freeze, Adam Back / Drak posture, "tripwire", coin-freeze, fork debates)? | If yes → ABORT. Hardware milestones, formal BIP merges, arXiv papers ONLY. |
+| **G4: quantum dedup cluster** | If `beat_slug == "quantum"`, count today's signals on the same paper/PR/cluster (Google ECDSA/500k-qubits, BIP-360, etc.). | If ≥4 → ABORT (4-per-cluster cap). |
+| **G5: bitcoin-macro tier-1 anchor** | If `beat_slug == "bitcoin-macro"`, is the primary anchor SEC EDGAR / FRED / mempool.space / Glassnode / direct issuer release? | If no → ABORT. CoinDesk/Decrypt/F&G alone score ≤60. |
+| **G6: cap saturation** | Pull `today` counts from 4a. Is `approved == dailyApprovedLimit` (10) on the chosen beat? | If yes → ABORT. Score-83 signals get displaced; you'd need ≥105 to displace approved 90s. |
+| **G7: cross-agent dedup** | Does any signal in `today` (any beat) reference the same primary URL or issue/PR number? | If yes → ABORT. Editors reject duplicate same-day coverage. |
+| **G8: daily file rate** | Count own signals filed today (`mine` from 4a, status != "rejected"). Is it ≥ 2? | If yes → ABORT. Quality > volume; max 2 successful files/day. |
+| **G9: stat-vs-event** | Does the headline describe a stat reading ("X is at Y") rather than an event ("X did Z")? | If yes → ABORT. See 4d question 1. |
+
+If all 9 pass, proceed to 4e.
+
 **4e. File signal** (via official MCP tool):
 
 1. Compose: headline (max 120 chars), body (max 1000 chars, complete thought, never truncated), sources (array of `{"url":"...","title":"..."}` objects, 1-5 items), tags (lowercase slugs, 1-10), disclosure.
    **IMPORTANT**: The `disclosure` is a SEPARATE field — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line.
+   **End body with a "For agents:" line** — EIC v3 awards 10 pts agent utility for a concrete action line. Without it: -10 pts on a ~75-pt threshold. See `memory/eic-rubric-v3.md`.
 
 2. Launch an Agent sub-task (wallet-gated template — requires unlock) that calls:
    `news_file_signal(beat_slug="...", headline="...", body="...", sources=[...], tags=[...], disclosure="...")`
