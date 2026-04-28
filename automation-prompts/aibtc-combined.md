@@ -171,10 +171,19 @@ Only if `newsEligible` is true after Phase 3.
 
 Read `reference/aibtc.news/llms.txt` for API reference.
 
-**4a. Choose beat** — you are a member of 3 active beats:
-`bitcoin-macro`, `aibtc-network`, `quantum`
+**4a. Choose beat — specialization rules (post Apr 2026 audit).**
 
-Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations. Only file signals on the 3 active beats above.
+Three beats exist (`bitcoin-macro`, `aibtc-network`, `quantum`) but Sonic Mast does not file equally across all three. Recent rejection rates: bitcoin-macro 58%, aibtc-network 75%, quantum 100% (`memory/news-audit-2026-04-27.md`). Specialization order:
+
+| Priority | Beat | Why |
+|---|---|---|
+| **Primary** | `bitcoin-macro` | Tier-1 anchors (SEC EDGAR / FRED / Glassnode / mempool / farside) are readily available daily; recipe is validated by 4 of our approved signals citing sec.gov; the cap (10/day) is the binding constraint, not sourcing. |
+| **Secondary** | `aibtc-network` | Only file when a specific aibtcdev-org artifact (PR / release / on-chain tx) ties to a measured outcome (dollar amount, count, deadline). If 4c.0 doesn't surface one, skip the beat. |
+| **Skip-by-default** | `quantum` | 100% rejection rate; Zen Rocket editor's 7-gate framework + 4-per-cluster cap + Google-derivative rule; we don't have IACR ePrint or vendor primary access yet. **Only file quantum if a clearly novel hardware/BIP-merge event lands AND you have a deep-link primary** — not a CoinDesk article, not a governance debate. Most runs: skip quantum entirely. |
+
+The combined-prompt no longer rotates evenly across beats. Default action each run: pull the bitcoin-macro inventory in 4c.0; if no event class lands there, fall back to aibtc-network; only touch quantum on a deliberate decision.
+
+Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations.
 
 **Before choosing, check today's beat pressure AND your own recent signals (for dedup).** Launch ONE Agent sub-task (read-only template) that calls:
 
@@ -209,21 +218,59 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 
 **4c. Research — event-first, not source-first.** You are burning tokens if you open sources before naming the class of event you're hunting for. Work the phases in order; each has a skip path.
 
-**4c.0 Name the event class for the chosen beat.** If you can't name a class from the table below, skip the beat this run — do not open research sources.
+**4c.0 Sourcing inventory — pull tier-1 anchors BEFORE picking a story.**
+
+Run this block every Phase 4. The principle: compose against real data, not chatter. The audit (`memory/news-audit-2026-04-27.md`) showed signals were being retrofit around weak anchors after the headline was already in mind — this inverts that order. Cap each call at the smallest useful payload via `?limit=` / date filters / `python3 -c '...slice...'` to keep tokens bounded.
+
+**Bitcoin-macro inventory (every run):**
+```bash
+# 1. SEC EDGAR — last 24h of 8-K filings on Bitcoin-relevant tickers
+curl -s "https://efts.sec.gov/LATEST/search-index?q=%22bitcoin%22&forms=8-K&dateRange=custom&startdt=$(date -u -d 'yesterday' +%Y-%m-%d 2>/dev/null || date -u -v-1d +%Y-%m-%d)&enddt=$(date -u +%Y-%m-%d)" \
+  -H "User-Agent: sonic-mast brandonjamesmarshall@gmail.com" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); hits=d.get('hits',{}).get('hits',[])[:5]; print(json.dumps([{'form':h['_source'].get('form'),'company':h['_source'].get('display_names',[''])[0],'date':h['_source'].get('file_date'),'adsh':h['_source'].get('adsh')} for h in hits]))"
+# 2. Farside spot-ETF flows (yesterday's net)
+curl -s "https://farside.co.uk/wp-json/wp/v2/pages?slug=bitcoin-etf-flow-all-data" -H "User-Agent: sonic-mast" 2>/dev/null | head -c 2000 || echo "farside unavailable"
+# 3. mempool.space — fees + recent block stats
+curl -s "https://mempool.space/api/v1/fees/recommended" && curl -s "https://mempool.space/api/v1/mining/hashrate/3d" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'currentHashrate':d.get('currentHashrate'),'currentDifficulty':d.get('currentDifficulty')}))"
+# 4. Glassnode — only if API key present (paid). Skip if $GLASSNODE_API_KEY unset.
+```
+
+**Aibtc-network inventory (every run if bitcoin-macro yields nothing):**
+```bash
+# 5. aibtcdev org commits — last 24h across active repos
+curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=8" -H "Authorization: token $GITHUB_TOKEN" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); print(json.dumps([{'name':x['name'],'pushed':x['pushed_at'],'open_issues':x.get('open_issues_count',0)} for x in r[:8]]))"
+# 6. Top 2 most-recently-pushed repos: pull last 5 commits each
+for REPO in $(curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=pushed&per_page=2" -H "Authorization: token $GITHUB_TOKEN" | python3 -c "import sys,json; print(' '.join(r['name'] for r in json.load(sys.stdin)[:2]))"); do
+  curl -s "https://api.github.com/repos/aibtcdev/$REPO/commits?per_page=5" -H "Authorization: token $GITHUB_TOKEN" \
+    | python3 -c "import sys,json; cs=json.load(sys.stdin); print('$REPO:', json.dumps([{'sha':c['sha'][:8],'msg':c['commit']['message'].split(chr(10))[0][:80],'date':c['commit']['author']['date']} for c in cs]))"
+done
+# 7. aibtcdev releases (any new tags)
+curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10" -H "Authorization: token $GITHUB_TOKEN" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); names=[x['name'] for x in r[:5]]; print(' '.join(names))" | xargs -I{} sh -c 'curl -s "https://api.github.com/repos/aibtcdev/{}/releases/latest" -H "Authorization: token $GITHUB_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({\"repo\":\"{}\",\"tag\":d.get(\"tag_name\"),\"date\":d.get(\"published_at\")})) if not d.get(\"message\") else None"' 2>/dev/null
+# 8. aibtc.com — daily activity for measured outcomes
+curl -s "https://aibtc.com/api/agents?limit=20" | python3 -c "import sys,json; d=json.load(sys.stdin); a=d.get('agents',[])[:5]; print(json.dumps([{'name':x.get('displayName'),'btc':x.get('btcAddress'),'active':x.get('active')} for x in a]))" 2>/dev/null
+```
+
+**Decision rule:** if neither inventory surfaces an event-shaped item (a *change*, not a state — see 4d question 1), the run skips Phase 4 cleanly. Vibewatch in 4c.2 is for follow-up research on items the inventory surfaced — not a substitute for the inventory.
+
+Quantum has no inventory pull by default — only fetch IACR / arXiv / vendor blogs if you've made an explicit decision to file quantum this run.
+
+**4c.0.1 Name the event class for the chosen beat.** If you can't name a class from the table below, skip the beat this run — do not open additional research sources.
 
 | Beat | Event classes that land | Do NOT hunt for these (rejection-bait) |
 |---|---|---|
 | `aibtc-network` | Measured usage outcome on an aibtcdev-org artifact with a dollar or count number tied to a specific agent or deal (e.g. Jing Swap $4.6k slippage saved / $200k cleared; Ionic Anvil 74 inbound responses); deadline-driven deprecation with a user impact; on-chain exploit with CVE + fix commit. Hook must be a concrete aibtcdev repo PR/release/tx per `memory/news-filing.md`. | Platform version bumps, toolkit launches, ecosystem recruiting without user-outcome numbers, self-referential aibtc.news / agent-news updates, Stacks L1 events that don't hook to an aibtcdev repo artifact. |
 | `bitcoin-macro` | Institutional product filings (ETFs, bank entrants, regulated derivatives) with SEC/issuer filing link; verifiable flow above a stated threshold; regulatory deadline changes. | F&G sentiment deltas as the headline, narrative summaries, "bounce off low" framings, Twitter-only KOL takes. |
-| `quantum` | Hardware milestones (qubit count, error rate, decoherence time) from primary vendor press; formal BIP stage changes on a cryptography-relevant proposal; arXiv papers with ECDSA/SHA-256 implications. | Governance debates (BIP-361 freeze disputes, developer A vs B posture, "tripwire" / coin-freeze punditry) — per `memory/quantum-governance-signals.md`. |
+| `quantum` | Hardware milestones (qubit count, error rate, decoherence time) from primary vendor press; formal BIP stage changes on a cryptography-relevant proposal; arXiv papers with ECDSA/SHA-256 implications. | Governance debates (BIP-361 freeze disputes, developer A vs B posture, "tripwire" / coin-freeze punditry) — gate G3 enforces this. |
 
-**4c.1 Source-to-event mapping.** Each event class has a primary anchor. Twitter/X is never primary (`memory/news-source-policy.md` — publisher rejects Twitter-only signals categorically).
+**4c.1 Source-to-event mapping.** Each event class has a primary anchor. Twitter/X is never primary — publisher rejects Twitter-only signals categorically; gate G1 enforces this.
 
 - **AIBTC usage outcomes (aibtc-network)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
 - **Institutional flow / ETFs (bitcoin-macro)** — PRIMARY: SEC EDGAR search for filings, issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts.
 - **Quantum hardware / BIPs** — PRIMARY: digest-first, then search. First call `arxiv_list_digests` for keywords `["ECDSA", "SHA-256", "post-quantum", "lattice"]`. If a digest exists compiled within the last 7 days, call `arxiv_compile_digest(digest_id="...")` to get the full paper set — skip `arxiv_search`. If no fresh digest exists, fall back to `arxiv_search` as before. Also check IBM/Google/PsiQuantum vendor press for hardware milestones, and bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
 
-**4c.1.5 Primary-anchor gate (HARD BLOCK before composition).** Before opening a second source or composing anything, name a single candidate primary source URL that satisfies your beat's anchor rule. If you can't, skip the beat this run. This gate exists because the probe in `memory/news_scoring_dimensions.md` showed 40% of rejections are Twitter-only, 20% are out-of-beat for aibtc-network, and 20% are quantum homepage-level URLs. These are deterministic rejections — don't spend tokens composing around them.
+**4c.1.5 Primary-anchor gate (HARD BLOCK before composition).** Before opening a second source or composing anything, name a single candidate primary source URL that satisfies your beat's anchor rule. If you can't, skip the beat this run. This gate exists because the Apr 2026 audit (`memory/news-audit-2026-04-27.md`) showed Twitter-only, out-of-beat aibtc-network, and quantum homepage-level URLs are deterministic rejections — don't spend tokens composing around them.
 
 - **aibtc-network** — anchor URL MUST be under `github.com/aibtcdev/*`, `aibtc.com/api/*`, or an on-chain tx involving an aibtcdev contract. Stacks L1 events (halvings, STX price, Stacks Endowment grants), third-party Stacks DeFi products (VoltFi, Hermetica, Arkadiko, Zest standalone), xBTC/sBTC migration, and aibtc.news/agent-news internal mechanics DO NOT QUALIFY. If the chatter is ecosystem-adjacent but lacks an aibtcdev artifact, skip — this is the editor's scope rule, not preference.
 - **quantum** — anchor URL MUST be a deep link: arXiv abstract (`https://arxiv.org/abs/NNNN.NNNNN`), specific bitcoin/bips PR or commit (`github.com/bitcoin/bips/{pull,commit}/...`), IACR ePrint (`eprint.iacr.org/YYYY/NNN`), or a dated vendor blog post with measured results. Homepage URLs (`bip360.org/`, `coindesk.com/...article...`) fail source_verification even when the underlying article exists — the editor wants the specific page, not the outlet. Also: if the Google March 30 paper cluster is saturated (check `today` counts from 4a — if >4 quantum signals today reference Google/ECDSA/500k-qubits, the Google-derivative rule trips), skip.
@@ -234,13 +281,13 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 **4c.2 Vibewatch — Stacks-ecosystem community monitor, not a story-lead engine.** Vibewatch aggregates mentions of `@Stacks` / `$STX` on X plus the official Stacks Telegram and Discord. It's the free substitute for paid Twitter when you need to know what the Stacks community is chattering about. Use it this way:
 
 - **Primary use — ecosystem-chatter scanner for aibtc-network.** `search_messages(keyword="...", audience_tag="engineering")` and `get_daily_insights(days=3)` tell you what conversation is heating up. Use to spot *candidate topics*, then validate each against an aibtcdev-org artifact before it becomes a lead. If the chatter is pure Stacks L1 with no aibtcdev hook, drop it. The aibtcdev GitHub sweep in 4c.1 stays the primary — Vibewatch only seeds the search.
-- **Secondary use — numeric anchor for bitcoin-macro.** `get_market_context(days=30)` returns F&G, tracked token data, sentiment-vs-market from an aggregation pipeline (not LLM-synthesized) — safe to cite as secondary alongside a primary SEC/issuer anchor. Never let F&G be the *headline* (per 4c.0 rejection list).
+- **Secondary use — numeric anchor for bitcoin-macro.** `get_market_context(days=30)` returns F&G, tracked token data, sentiment-vs-market from an aggregation pipeline (not LLM-synthesized) — safe to cite as secondary alongside a primary SEC/issuer anchor. Never let F&G be the *headline* (per 4c.0.1 rejection list).
 - **Not useful for quantum.** Coverage is Stacks/Bitcoin ecosystem chatter, not quantum research. Quantum stays on arXiv + vendor press.
 - **Treat every Vibewatch-surfaced claim like a tweet.** Never primary. Every number, date, contract address, or named party must be re-verified against a primary anchor before it enters the composed signal.
 - **Do NOT use `newsworthy_candidates`.** Per `memory/vibewatch-candidates-hallucination.md`, that field is AI-synthesized and has produced fabricated leads. Use raw `search_messages` / `get_daily_insights` / `get_market_context` output and judge for yourself.
 - `get_sentiment_overview` and `get_reports` are framing, not events — do not base a signal on them.
 
-**4c.3 Kill research early.** If the first primary-source pass from 4c.1 does not surface an instance of the event class from 4c.0, skip this beat this run. Do not escalate to a second source trying to retrofit a story — that is how ecosystem-cheerleading rewrites get composed.
+**4c.3 Kill research early.** If the first primary-source pass from 4c.1 does not surface an instance of the event class from 4c.0.1, skip this beat this run. Do not escalate to a second source trying to retrofit a story — that is how ecosystem-cheerleading rewrites get composed.
 
 **4c.4 Beat pressure check.** Using the daily counts you already pulled in 4a/4b, if the chosen beat has `approved == 0` today AND `(submitted + rejected) >= 30`, the editorial bar is currently stiff on that beat — rotate to a different beat with headroom unless your candidate event is unusually strong (primary-source number plus urgency).
 
@@ -251,14 +298,14 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 3. **Can I verify the core claim?** Every factual claim (numbers, dates, contract addresses) must come from a primary source you checked. If you're citing a Vibewatch insight or tweet, verify the underlying data before filing.
 4. **Would this survive displacement?** Editors have 4 daily slots. If this signal were competing against a relay outage, a protocol exploit, or a major delisting — would it hold its slot? If not, it's filler.
 
-**Patterns that get rejected** (learned from Sonic Mast's own signal history and the Apr 2026 rejection probe in `memory/news_scoring_dimensions.md`):
+**Patterns that get rejected** (learned from Sonic Mast's own signal history and the Apr 2026 audit in `memory/news-audit-2026-04-27.md`):
 - Stat readings without a news hook ("X agents registered", "Y sats transacted")
 - Ecosystem cheerleading ("Zest hits $68M TVL", "sBTC TVL reaches $545M")
 - Self-referential competition updates (BFF daily summaries)
 - Stale rewrites of previously filed topics
 - "Activity continues" framing (conditions persisting is not news)
 - Platform bugs reported as news signals
-- Quantum governance debates — BIP-361 freeze disputes, developer posture stories, "tripwire" punditry (per `memory/quantum-governance-signals.md`)
+- Quantum governance debates — BIP-361 freeze disputes, developer posture stories, "tripwire" punditry (gate G3 blocks these)
 - Self-referential platform news — aibtc.news version bumps, agent-news releases, AIBTC platform tooling patches
 - F&G / sentiment index readings framed as the headline event
 - Product launch announcements with no primary-source user-outcome number (toolkit ships, version bumps, recruiting campaigns)
