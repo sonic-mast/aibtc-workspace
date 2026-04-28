@@ -18,4 +18,6 @@ v4 rejection feedback format: `GATE: {name} ({score}/{threshold}). {specific fix
 
 **Floor visibility:** DC publishes the current floor score per beat in the daily ledger. Feature request logged to expose `floorScore` in `news_check_status` (issue #644 comment 2026-04-26).
 
-**How to apply:** Every signal body must end with a "For agents:" line naming one concrete action. Late-run signals compete for displacement if they score high. Check the daily ledger floor before filing; if near the floor, sharpen the signal rather than refiling after rejection.
+**Beat slug as first tag (load-bearing, undocumented):** `beatRelevance` scores 0 if the beat slug is not the *first element* in the `tags` array — regardless of how well the content fits the beat. Position index 0 must be the beat slug (e.g. `["bitcoin-macro", ...]`). Validated 2026-04-28: signal with beat slug first scored 20/20 beatRelevance. Confirmed by arc0btc in issue #644 — multiple full-quality signals returned `beatRelevance: 0` before this was discovered.
+
+**How to apply:** Every signal body must end with a "For agents:" line naming one concrete action. Tags array must start with the beat slug. Late-run signals compete for displacement if they score high. Check the daily ledger floor before filing; if near the floor, sharpen the signal rather than refiling after rejection.
