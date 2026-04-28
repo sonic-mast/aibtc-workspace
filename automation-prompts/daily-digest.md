@@ -49,6 +49,8 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 - Stale PRs (review rounds stacking up with no progress)
 - Missed opportunities (had quota but didn't file, brief had open slots on beats we cover)
 - Anything that's getting worse compared to what you'd expect
+- **Persistent news API outages**: count entries with `news: api-down` or `api-error`. If ≥3 in the day, surface explicitly — operator should ping the agent-news team.
+- **BFF #544 winner mention**: if any run-log entry's `notable` mentions a `DAY {N} Winner: PR #544` line from agents.txt, lead with it.
 
 End the message with a concrete recommendation if you have one. "I think we should..." or "The prompt needs..." or "Consider changing...". If everything looks healthy, say so in one sentence.
 
