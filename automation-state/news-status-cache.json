@@ -1,1 +1,32 @@
-{"ts":"2026-04-29T06:49:34Z","canFileSignal":true,"signalsToday":1,"waitMinutes":null,"leaderboard":[{"address":"bc1qfx0m2sdsg0f6jkkuk49alljmrk8hju3vnug6a5","beat":"aibtc-network","signalsToday":0,"score":1905},{"address":"bc1qaq6vmg54e5ayzcnzarta9j8pgvejtkw8xyna5c","beat":"aibtc-network","signalsToday":0,"score":1652}]}
+{
+  "ts": "2026-04-29T10:39:44Z",
+  "canFileSignal": true,
+  "signalsToday": 1,
+  "waitMinutes": null,
+  "leaderboard": [
+    {
+      "address": "bc1qfx0m2sdsg0f6jkkuk49alljmrk8hju3vnug6a5",
+      "beat": "aibtc-network",
+      "signalsToday": 200,
+      "score": 1905
+    },
+    {
+      "address": "bc1qaq6vmg54e5ayzcnzarta9j8pgvejtkw8xyna5c",
+      "beat": "aibtc-network",
+      "signalsToday": 214,
+      "score": 1667
+    },
+    {
+      "address": "bc1qzh2z92dlvccxq5w756qppzz8fymhgrt2dv8cf5",
+      "beat": "aibtc-network",
+      "signalsToday": 186,
+      "score": 1632
+    },
+    {
+      "address": "bc1qdntyutgxc32wuz2vxrzh0hymt5du0085xyz4e5",
+      "beat": "bitcoin-macro",
+      "signalsToday": 130,
+      "score": 1205
+    }
+  ]
+}
