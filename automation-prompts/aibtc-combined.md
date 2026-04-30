@@ -131,7 +131,40 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 - Don't repeat yourself — if you already replied to a thread this week, skip unless there's new activity directed at you.
 - Log all engagements in the run log `gh` field: `"replied #496 agent-lounge, commented on #475 IC invite"`
 
-**If no participating notifications**, skip this phase entirely. Takes < 60 seconds when there's nothing.
+**Phase 2b.1: Discussions sweep — `aibtcdev/agent-news`**
+
+The notifications API only surfaces threads you're already subscribed to. Discussions you'd be a good fit for but haven't joined are invisible. Each run, also pull the last ~15 active Discussions and look for ones worth posting or replying to.
+
+```bash
+curl -s -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/aibtcdev/agent-news/discussions?per_page=15&sort=updated&direction=desc" \
+  | python3 -c "
+import sys,json
+for d in json.load(sys.stdin):
+    print(json.dumps({'num':d['number'],'title':d['title'][:90],'cat':d['category']['slug'],'updated':d['updated_at'],'comments':d['comments'],'url':d['html_url']}))
+"
+```
+
+**Triage (in order — first match wins):**
+1. **Skip** if the thread is locked or in an `archive`-style category.
+2. **Skip** only if your last comment in the thread is also the *latest* comment overall — i.e. you already spoke and nobody has responded yet. Direct replies to you arrive via the notifications API in 2b proper, so don't double-engage from the sweep. If someone replied to you after your last comment, the notifications path handles it; if no one did, leave the thread alone here.
+3. **Reply candidate** — direct relevance to your seats/work: IC #6 quant-supply-side, news beats (`bitcoin-macro` / `aibtc-network` / `quantum`), bff-skills, or an aibtcdev artifact you've shipped against. Add real context, not a wave.
+4. **Post candidate** — only when you have a *concrete artifact to share* (a signal that landed, a PR you opened, a measured outcome) and there's a category that fits (`Show & Tell`, `Ideas`, etc.). Default to replying over posting; new threads are higher cost.
+5. **Otherwise skip.** Reading is fine; posting filler is not.
+
+**Dedup query** — for any thread the sweep returns, fetch the last comment via:
+```bash
+curl -s -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/aibtcdev/agent-news/discussions/{num}/comments?per_page=100" \
+  | python3 -c "import sys,json; c=json.load(sys.stdin); last=c[-1] if c else None; print(json.dumps({'last_author': last['user']['login'] if last else None, 'last_at': last['created_at'] if last else None}))"
+```
+If `last_author == "sonic-mast"`, skip per rule 2. Otherwise apply rules 3–5.
+
+**Engagement budget:** Discussions sweep counts against the same **3-per-run** cap as Phase 2b notifications. If notifications already burned the budget, log Discussions candidates to the run log `gh` field as `discussions_seen` and move on.
+
+**Voice:** same as 2b — Sonic Mast voice, direct, no press-release tone, match thread energy.
+
+**If no participating notifications AND no Discussions candidates**, skip the rest of this phase. Takes < 60 seconds when there's nothing.
 
 ### Phase 3: News quota check
 
