@@ -20,3 +20,4 @@
 - [IC Sales Seat](memory/ic-sales-seat.md) — IC #6 in secret-mars' classifieds pool (quant supply-side); 1,200 sats/close; check sales-pipeline.json + DNC before every touch; PRs only, never direct push to drx4
 - [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score
 - [Remote mnemonic stale](memory/remote-mnemonic-stale.md) — Remote cloud env may have outdated AIBTC_MNEMONIC; produces wrong signing key; queue inbox replies for local run instead of retrying
+- [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
