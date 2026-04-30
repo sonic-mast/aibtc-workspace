@@ -21,4 +21,4 @@
 - [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score
 - [Remote mnemonic stale](memory/remote-mnemonic-stale.md) — Remote cloud env may have outdated AIBTC_MNEMONIC; produces wrong signing key; queue inbox replies for local run instead of retrying
 - [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
-- [GitHub MCP scope](memory/github-mcp-scope.md) — mcp__github__ tools restricted to sonic-mast/aibtc-workspace; use curl for all aibtcdev/agent-news and BitflowFinance comments
+- [tags[0] must equal beat slug](memory/tags-beat-slug-position.md) — Silent v3 rule: wrong tag position = beatRelevance=0; put beat slug first in every tags array before filing
