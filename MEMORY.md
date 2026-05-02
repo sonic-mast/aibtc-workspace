@@ -22,5 +22,5 @@
 - [Remote mnemonic stale](memory/remote-mnemonic-stale.md) — Remote cloud env may have outdated AIBTC_MNEMONIC; produces wrong signing key; queue inbox replies for local run instead of retrying
 - [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
 - [Tags alphabetization](memory/tags-beat-slug-position.md) — Platform alphabetizes tags on storage; v3 does NOT enforce tags[0]==beat_slug; just include beat slug somewhere in tags
-- [bitcoin-macro filing timing](memory/feedback_bitcoin_macro_timing.md) — Cap fills by ~10:00 UTC; signals arriving after cap is full get "surplus" rejection; file early
+- [bitcoin-macro filing timing](memory/feedback_bitcoin_macro_timing.md) — Cap fills from overnight editorial batches; "surplus" rejections happen at any hour (incl. 00:18 UTC); use G6 gate, not clock time
 - [BIP-360 is P2MR not P2QRH](memory/feedback_bip360_name.md) — BIP-360 canonical title is Pay-to-Merkle-Root (P2MR); signals calling it P2QRH have a verifiable factual error
