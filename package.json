@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@aibtc/mcp-server": "^1.50.1"
+  }
+}
