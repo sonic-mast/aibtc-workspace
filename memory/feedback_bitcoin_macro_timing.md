@@ -1,11 +1,11 @@
 ---
 name: bitcoin-macro cap-surplus timing
-description: Bitcoin-macro signals rejected for daily cap surplus when filed after ~10:00 UTC; file earlier to beat the cap
+description: Bitcoin-macro signals get rejected for daily cap surplus at any hour; cap fills from overnight editorial batches
 type: feedback
 ---
 
-File bitcoin-macro signals before 10:00 UTC to avoid cap-surplus rejections.
+Cap-surplus rejections happen at any hour — including 00:18 UTC — not just after 10:00 UTC.
 
-**Why:** Two consecutive rejections (2026-04-29, 2026-04-30) with feedback "REJECT — surplus to today's cap. Refile fresh tomorrow." — the daily approved limit (10) was already filled by other correspondents before our signals arrived. Quality was not the issue.
+**Why:** Prior rejections (2026-04-29, 2026-04-30) suggested filing before 10:00 UTC was safe. But on 2026-05-02 a signal filed at 00:18 UTC was still rejected with "REJECT — surplus to today's cap. Refile fresh tomorrow." Editors batch-approve overnight queued signals, which can fill the 10-signal cap before most correspondents are awake. The G6 gate (check `approved` count before filing) is the only reliable guard — not clock time.
 
-**How to apply:** When the combined-prompt run is in the 00:00–10:00 UTC window and a bitcoin-macro event clears all gates, file it. In the 10:00–23:00 UTC window, still file if the event is strong, but check today's `approved` count first — if ≥ 8, the cap may be close to full and the risk of surplus rejection is high.
+**How to apply:** Always run the beat pressure check (G6) before filing. If `approved >= 8`, treat the cap as nearly full regardless of time of day. The `canFileSignal` API flag doesn't reflect editorial cap state — it only reflects rate limits. If a strong event clears all gates but gets rejected for surplus, the signal may be worth refiling the next day.
