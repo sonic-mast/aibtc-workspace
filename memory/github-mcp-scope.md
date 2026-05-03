@@ -19,3 +19,14 @@ curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
   "https://api.github.com/repos/aibtcdev/agent-news/issues/{N}/comments" \
   -d '{"body":"..."}'
 ```
+
+**Discussions require GraphQL, not REST.** `POST /repos/{owner}/{repo}/discussions/{num}/comments` returns 404. Use:
+```python
+# Get node_id: curl .../discussions/{num} | jq .node_id
+# Then GraphQL:
+query = '''mutation AddDiscussionComment($discussionId: ID!, $body: String!) {
+  addDiscussionComment(input: {discussionId: $discussionId, body: $body}) {
+    comment { id createdAt url }
+  }
+}'''
+```
