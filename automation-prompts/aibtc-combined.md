@@ -213,17 +213,17 @@ Only if `newsEligible` is true after Phase 3.
 
 Read `reference/aibtc.news/llms.txt` for API reference.
 
-**4a. Choose beat — specialization rules (post Apr 2026 audit).**
+**4a. Choose beat — specialization rules (post May 2026 telemetry pivot).**
 
-Three beats exist (`bitcoin-macro`, `aibtc-network`, `quantum`) but Sonic Mast does not file equally across all three. Recent rejection rates: bitcoin-macro 58%, aibtc-network 75%, quantum 100% (`memory/news-audit-2026-04-27.md`). Specialization order:
+Three beats exist (`bitcoin-macro`, `aibtc-network`, `quantum`). Sonic Mast's recent score band is 73–88; the cap-displacement floor is 90+. The fix is lane selection: structural-telemetry primaries (mempool / bitnodes / stratum / libsecp256k1 / Bitcoin Optech) score 93–100; SEC 8-K + media combos score 78–88. Specialization order:
 
 | Priority | Beat | Why |
 |---|---|---|
-| **Primary** | `bitcoin-macro` | Tier-1 anchors (SEC EDGAR / FRED / Glassnode / mempool / farside) are readily available daily; recipe is validated by 4 of our approved signals citing sec.gov; the cap (10/day) is the binding constraint, not sourcing. |
-| **Secondary** | `aibtc-network` | Only file when a specific aibtcdev-org artifact (PR / release / on-chain tx) ties to a measured outcome (dollar amount, count, deadline). If 4c.0 doesn't surface one, skip the beat. |
-| **Skip-by-default** | `quantum` | 100% rejection rate; Zen Rocket editor's 7-gate framework + 4-per-cluster cap + Google-derivative rule; we don't have IACR ePrint or vendor primary access yet. **Only file quantum if a clearly novel hardware/BIP-merge event lands AND you have a deep-link primary** — not a CoinDesk article, not a governance debate. Most runs: skip quantum entirely. |
+| **Primary** | `bitcoin-macro` (telemetry-anchored) | Daily mempool.space / bitnodes.io / stratumprotocol / libsecp256k1 / Bitcoin Optech reads score 93–100. SEC 8-K is fallback when telemetry surfaces nothing; ETF flow stats only with EDGAR anchor (Google News RSS scored 53). |
+| **Secondary** | `aibtc-network` | BFF Skills competition merge events + tx-schemas / x402-sponsor-relay / agent-news PRs score 90–100 when an aibtcdev artifact ties to a measured outcome (dollar amount, count, deadline). Sonic Mast is *in* the BFF competition per `memory/project_bff_skills.md` — file on merge events. |
+| **Last** | `quantum` | Only FIPS / BIP / IACR ePrint primary; never Google / IBM / vendor derivative (gates `google_derivative` and `homepage-level source` are deterministic rejects). Most runs: skip. |
 
-The combined-prompt no longer rotates evenly across beats. Default action each run: pull the bitcoin-macro inventory in 4c.0; if no event class lands there, fall back to aibtc-network; only touch quantum on a deliberate decision.
+The combined-prompt no longer rotates evenly across beats. Default action each run: pull the bitcoin-macro **telemetry** inventory in 4c.0 FIRST; SEC 8-K is fallback. If neither bitcoin-macro lane lands, try aibtc-network (BFF Skills + aibtcdev PRs). Only touch quantum on a deliberate decision with a primary-source URL in hand.
 
 Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations.
 
@@ -264,33 +264,48 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 
 Run this block every Phase 4. The principle: compose against real data, not chatter. The audit (`memory/news-audit-2026-04-27.md`) showed signals were being retrofit around weak anchors after the headline was already in mind — this inverts that order. Cap each call at the smallest useful payload via `?limit=` / date filters / `python3 -c '...slice...'` to keep tokens bounded.
 
-**Bitcoin-macro inventory (every run):**
+**Bitcoin-macro inventory (every run) — TELEMETRY FIRST, SEC fallback:**
 ```bash
-# 1. SEC EDGAR — last 24h of 8-K filings on Bitcoin-relevant tickers
+# 1. mempool.space — fees, hashrate, block-depth telemetry (PRIMARY: this is the 93+ scoring lane)
+curl -s "https://mempool.space/api/v1/fees/recommended"
+curl -s "https://mempool.space/api/v1/mining/hashrate/3d" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'currentHashrate':d.get('currentHashrate'),'currentDifficulty':d.get('currentDifficulty')}))"
+curl -s "https://mempool.space/api/v1/mining/blocks/extras/24h" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([{'height':b.get('height'),'extras':{k:b.get('extras',{}).get(k) for k in ['totalFees','medianFee','feeRange']}} for b in d[:3]])) if isinstance(d,list) else print('mempool blocks unavailable')" 2>/dev/null
+# 2. bitnodes.io — node-share telemetry (Knots vs Core vs others)
+curl -s "https://bitnodes.io/api/v1/snapshots/?limit=1" | python3 -c "import sys,json; d=json.load(sys.stdin); s=(d.get('results') or [{}])[0]; print(json.dumps({'timestamp':s.get('timestamp'),'total_nodes':s.get('total_nodes'),'latest_height':s.get('latest_height')}))"
+# 3. libsecp256k1 / bitcoin-core latest releases (release-event telemetry)
+curl -s "https://api.github.com/repos/bitcoin-core/secp256k1/releases/latest" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'repo':'secp256k1','tag':d.get('tag_name'),'date':d.get('published_at'),'name':d.get('name')})) if not d.get('message') else None" 2>/dev/null
+curl -s "https://api.github.com/repos/bitcoin/bitcoin/releases/latest" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'repo':'bitcoin','tag':d.get('tag_name'),'date':d.get('published_at'),'name':d.get('name')})) if not d.get('message') else None" 2>/dev/null
+# 4. Bitcoin Optech newsletters — last 4 (Optech research items as primary anchor)
+curl -s "https://bitcoinops.org/feed.xml" | python3 -c "import sys,re; t=sys.stdin.read(); items=re.findall(r'<entry>.*?<title[^>]*>(.*?)</title>.*?<link[^>]*href=\"([^\"]+)\".*?<published>([^<]+)</published>.*?</entry>', t, re.S)[:4]; [print(json.dumps({'title':i[0],'url':i[1],'date':i[2]})) for i in items]" 2>/dev/null || echo "optech unavailable"
+# 5. SEC EDGAR — last 24h of 8-K filings (FALLBACK: only if telemetry surfaces no event)
 curl -s "https://efts.sec.gov/LATEST/search-index?q=%22bitcoin%22&forms=8-K&dateRange=custom&startdt=$(date -u -d 'yesterday' +%Y-%m-%d 2>/dev/null || date -u -v-1d +%Y-%m-%d)&enddt=$(date -u +%Y-%m-%d)" \
   -H "User-Agent: sonic-mast brandonjamesmarshall@gmail.com" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); hits=d.get('hits',{}).get('hits',[])[:5]; print(json.dumps([{'form':h['_source'].get('form'),'company':h['_source'].get('display_names',[''])[0],'date':h['_source'].get('file_date'),'adsh':h['_source'].get('adsh')} for h in hits]))"
-# 2. Farside spot-ETF flows (yesterday's net)
+# 6. Farside spot-ETF flows (only useful when paired with EDGAR anchor; Google News RSS sole-source scored 53)
 curl -s "https://farside.co.uk/wp-json/wp/v2/pages?slug=bitcoin-etf-flow-all-data" -H "User-Agent: sonic-mast" 2>/dev/null | head -c 2000 || echo "farside unavailable"
-# 3. mempool.space — fees + recent block stats
-curl -s "https://mempool.space/api/v1/fees/recommended" && curl -s "https://mempool.space/api/v1/mining/hashrate/3d" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'currentHashrate':d.get('currentHashrate'),'currentDifficulty':d.get('currentDifficulty')}))"
-# 4. Glassnode — only if API key present (paid). Skip if $GLASSNODE_API_KEY unset.
 ```
 
 **Aibtc-network inventory (every run if bitcoin-macro yields nothing):**
 ```bash
-# 5. aibtcdev org commits — last 24h across active repos
+# 5. BFF Skills competition — daily winners + skill PR merges (Glowing Raptor scored 100 on a daily-winner signal)
+curl -s "https://api.github.com/repos/aibtcdev/bff-skills-comp/pulls?state=closed&sort=updated&direction=desc&per_page=8" -H "Authorization: token $GITHUB_TOKEN" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); print(json.dumps([{'num':p['number'],'title':p['title'][:80],'merged':p.get('merged_at'),'user':p['user']['login']} for p in r if p.get('merged_at')][:5]))" 2>/dev/null || echo "bff-skills-comp unavailable"
+curl -s "https://api.github.com/repos/aibtcdev/bff-skills-comp/issues?state=open&sort=updated&direction=desc&per_page=5" -H "Authorization: token $GITHUB_TOKEN" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); print(json.dumps([{'num':i['number'],'title':i['title'][:80],'updated':i['updated_at']} for i in r if 'pull_request' not in i][:3]))" 2>/dev/null
+# 6. tx-schemas / x402-sponsor-relay releases (version bumps with measured behavioral changes)
+for REPO in tx-schemas x402-sponsor-relay aibtc-mcp-server agent-news; do
+  curl -s "https://api.github.com/repos/aibtcdev/$REPO/releases/latest" -H "Authorization: token $GITHUB_TOKEN" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({'repo':'$REPO','tag':d.get('tag_name'),'date':d.get('published_at'),'name':(d.get('name') or '')[:80]})) if not d.get('message') else None" 2>/dev/null
+done
+# 7. aibtcdev org commits — last 24h across active repos
 curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=8" -H "Authorization: token $GITHUB_TOKEN" \
   | python3 -c "import sys,json; r=json.load(sys.stdin); print(json.dumps([{'name':x['name'],'pushed':x['pushed_at'],'open_issues':x.get('open_issues_count',0)} for x in r[:8]]))"
-# 6. Top 2 most-recently-pushed repos: pull last 5 commits each
+# 8. Top 2 most-recently-pushed repos: pull last 5 commits each
 for REPO in $(curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=pushed&per_page=2" -H "Authorization: token $GITHUB_TOKEN" | python3 -c "import sys,json; print(' '.join(r['name'] for r in json.load(sys.stdin)[:2]))"); do
   curl -s "https://api.github.com/repos/aibtcdev/$REPO/commits?per_page=5" -H "Authorization: token $GITHUB_TOKEN" \
     | python3 -c "import sys,json; cs=json.load(sys.stdin); print('$REPO:', json.dumps([{'sha':c['sha'][:8],'msg':c['commit']['message'].split(chr(10))[0][:80],'date':c['commit']['author']['date']} for c in cs]))"
 done
-# 7. aibtcdev releases (any new tags)
-curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10" -H "Authorization: token $GITHUB_TOKEN" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin); names=[x['name'] for x in r[:5]]; print(' '.join(names))" | xargs -I{} sh -c 'curl -s "https://api.github.com/repos/aibtcdev/{}/releases/latest" -H "Authorization: token $GITHUB_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps({\"repo\":\"{}\",\"tag\":d.get(\"tag_name\"),\"date\":d.get(\"published_at\")})) if not d.get(\"message\") else None"' 2>/dev/null
-# 8. aibtc.com — daily activity for measured outcomes
+# 9. aibtc.com — daily activity for measured outcomes
 curl -s "https://aibtc.com/api/agents?limit=20" | python3 -c "import sys,json; d=json.load(sys.stdin); a=d.get('agents',[])[:5]; print(json.dumps([{'name':x.get('displayName'),'btc':x.get('btcAddress'),'active':x.get('active')} for x in a]))" 2>/dev/null
 ```
 
@@ -300,23 +315,32 @@ Quantum has no inventory pull by default — only fetch IACR / arXiv / vendor bl
 
 **4c.0.1 Name the event class for the chosen beat.** If you can't name a class from the table below, skip the beat this run — do not open additional research sources.
 
+Default action each run: pull bitcoin-macro **telemetry** classes FIRST (mempool / bitnodes / Optech / libsecp256k1). SEC 8-K is the fallback when telemetry surfaces nothing event-shaped. The cap-displacement floor is 90; structural-telemetry primaries land at 93–100, SEC 8-K + media combos land at 78–88.
+
 | Beat | Event classes that land | Do NOT hunt for these (rejection-bait) |
 |---|---|---|
-| `aibtc-network` | Measured usage outcome on an aibtcdev-org artifact with a dollar or count number tied to a specific agent or deal (e.g. Jing Swap $4.6k slippage saved / $200k cleared; Ionic Anvil 74 inbound responses); deadline-driven deprecation with a user impact; on-chain exploit with CVE + fix commit. Hook must be a concrete aibtcdev repo PR/release/tx per `memory/news-filing.md`. | Platform version bumps, toolkit launches, ecosystem recruiting without user-outcome numbers, self-referential aibtc.news / agent-news updates, Stacks L1 events that don't hook to an aibtcdev repo artifact. |
-| `bitcoin-macro` | Institutional product filings (ETFs, bank entrants, regulated derivatives) with SEC/issuer filing link; verifiable flow above a stated threshold; regulatory deadline changes. | F&G sentiment deltas as the headline, narrative summaries, "bounce off low" framings, Twitter-only KOL takes. |
-| `quantum` | Hardware milestones (qubit count, error rate, decoherence time) from primary vendor press; formal BIP stage changes on a cryptography-relevant proposal; arXiv papers with ECDSA/SHA-256 implications. | Governance debates (BIP-361 freeze disputes, developer A vs B posture, "tripwire" / coin-freeze punditry) — gate G3 enforces this. |
+| `bitcoin-macro` (telemetry — preferred) | **libsecp256k1 / Bitcoin Core release telemetry** with measurable benchmark (signing ops/sec, validation throughput); **mining protocol adoption shift** (Stratum V2 pool share, Knots node share via bitnodes/stratumprotocol with daily delta); **mempool fee floor / block depth** with peg-in implication anchored to mempool.space numbers; **Bitcoin Optech newsletter primary** — specific Optech research item with a measurable claim. | Routine release notes without benchmarks, single-day fee blips without trend, Optech *summary* (you must point to the underlying primary, not the newsletter alone if it's just a roundup). |
+| `bitcoin-macro` (institutional — fallback) | Institutional product filings (ETFs, bank entrants, regulated derivatives) with SEC EDGAR / issuer filing link; verifiable flow above a stated threshold paired with EDGAR; regulatory deadline changes. | F&G sentiment deltas as the headline; narrative summaries; "bounce off low" framings; Twitter-only KOL takes; ETF flow stats sourced solely from Google News RSS or CoinDesk (Cold Cannon scored 53 with this pattern). |
+| `aibtc-network` | **BFF Skills competition merge events** — daily winner announcement, skill PR merged, judging outcome (Glowing Raptor scored 100 on this lane); **tx-schemas / x402-sponsor-relay / agent-news / aibtc-mcp-server release** with measured behavioral change; measured usage outcome on an aibtcdev-org artifact with a dollar or count number tied to a specific agent or deal (e.g. Jing Swap $4.6k slippage saved; Ionic Anvil 74 inbound responses); deadline-driven deprecation with user impact; on-chain exploit with CVE + fix commit. Hook must be a concrete aibtcdev repo PR/release/tx per `memory/news-filing.md`. | Platform version bumps without user-impact number, toolkit launches, ecosystem recruiting without user-outcome numbers, self-referential aibtc.news / agent-news updates without behavioral change, Stacks L1 events that don't hook to an aibtcdev repo artifact. |
+| `quantum` | Hardware milestones (qubit count, error rate, decoherence time) from primary vendor press; formal BIP stage changes on a cryptography-relevant proposal; arXiv / IACR ePrint papers with ECDSA/SHA-256 implications; NIST FIPS publication updates. | Governance debates (BIP-361 freeze disputes, developer A vs B posture, "tripwire" / coin-freeze punditry) — gate G3 enforces this. **Google / IBM / vendor-derivative coverage** — if the paper or announcement has been filed on already today by another correspondent, the editor cites `google_derivative` and rejects. |
 
 **4c.1 Source-to-event mapping.** Each event class has a primary anchor. Twitter/X is never primary — publisher rejects Twitter-only signals categorically; gate G1 enforces this.
 
-- **AIBTC usage outcomes (aibtc-network)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
-- **Institutional flow / ETFs (bitcoin-macro)** — PRIMARY: SEC EDGAR search for filings, issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts.
-- **Quantum hardware / BIPs** — PRIMARY: digest-first, then search. First call `arxiv_list_digests` for keywords `["ECDSA", "SHA-256", "post-quantum", "lattice"]`. If a digest exists compiled within the last 7 days, call `arxiv_compile_digest(digest_id="...")` to get the full paper set — skip `arxiv_search`. If no fresh digest exists, fall back to `arxiv_search` as before. Also check IBM/Google/PsiQuantum vendor press for hardware milestones, and bitcoin/bips repo for formal BIP stage changes. No Twitter governance threads.
+- **Bitcoin Core / libsecp256k1 release telemetry (bitcoin-macro)** — PRIMARY: `https://api.github.com/repos/bitcoin-core/secp256k1/releases/latest` or `https://api.github.com/repos/bitcoin/bitcoin/releases/latest` (use the GitHub release page URL `https://github.com/bitcoin-core/secp256k1/releases/tag/<tag>` as the anchor). For benchmark numbers, the release notes themselves are the source — do NOT cite a media rewrite of release notes.
+- **Mining protocol adoption (bitcoin-macro)** — PRIMARY: `https://bitnodes.io/api/v1/snapshots/<id>/` for node-share snapshot, `https://stratumprotocol.org/` for Stratum V2 pool adoption page (cite the dated stat block), `https://mempool.space/api/v1/mining/pools/24h` for pool share. Cite the API or stat-block URL, not a CoinDesk summary.
+- **Mempool / fees (bitcoin-macro)** — PRIMARY: `https://mempool.space/api/v1/fees/recommended`, `https://mempool.space/api/v1/mining/blocks/extras/24h`. Cite the specific endpoint reading; pair with one secondary (Bitcoin Optech or fee-tracking dashboard) for confirmation.
+- **Bitcoin Optech newsletter (bitcoin-macro)** — PRIMARY: `https://bitcoinops.org/en/newsletters/YYYY/MM/DD/` for a specific dated newsletter. Anchor to a measurable claim *within* the issue (e.g. a fuse-filter speedup ratio), and follow Optech's link to the underlying primary (paper, PR, BIP) where available.
+- **BFF Skills competition events (aibtc-network)** — PRIMARY: `https://api.github.com/repos/aibtcdev/bff-skills-comp/pulls/<num>` for a merged skill PR, daily-winner issue thread, or judging outcome comment. Per `memory/project_bff_skills.md`, Sonic Mast is in the competition — file on merge events as primary participant + observer.
+- **tx-schemas / x402-sponsor-relay / agent-news / aibtc-mcp-server release (aibtc-network)** — PRIMARY: `https://github.com/aibtcdev/<repo>/releases/tag/<tag>` for release page, `https://github.com/aibtcdev/<repo>/pull/<num>` for a merged PR with measurable behavioral change. Cite commit SHA in body for traceability.
+- **AIBTC usage outcomes (aibtc-network — fallback)** — PRIMARY: `curl -s "https://api.github.com/orgs/aibtcdev/repos?sort=updated&per_page=10"` → check releases/commits/issues on the two most recently active repos. SECONDARY: `curl -s "https://aibtc.com/api/activity?btcAddress=bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47"` for per-agent counts and events. Stacks Forum for governance/protocol hooks only.
+- **Institutional flow / ETFs (bitcoin-macro fallback)** — PRIMARY: SEC EDGAR filing page (specific accession), issuer press release URLs. SECONDARY: CoinDesk / Decrypt for confirmation. Visser Labs RSS (`https://visserlabs.substack.com/feed`) for macro analysts. ETF flow stats without an EDGAR anchor will score below 90 (per `memory/feedback_bitcoin_macro_edgar_anchor.md`).
+- **Quantum hardware / BIPs** — PRIMARY: digest-first, then search. First call `arxiv_list_digests` for keywords `["ECDSA", "SHA-256", "post-quantum", "lattice"]`. If a digest exists compiled within the last 7 days, call `arxiv_compile_digest(digest_id="...")` to get the full paper set — skip `arxiv_search`. If no fresh digest exists, fall back to `arxiv_search` as before. Also check IBM/Google/PsiQuantum vendor press for hardware milestones, and bitcoin/bips repo for formal BIP stage changes. NIST FIPS 204/205 pages and IACR ePrint deep links also qualify. No Twitter governance threads, no Google/IBM derivative coverage of already-filed papers.
 
 **4c.1.5 Primary-anchor gate (HARD BLOCK before composition).** Before opening a second source or composing anything, name a single candidate primary source URL that satisfies your beat's anchor rule. If you can't, skip the beat this run. This gate exists because the Apr 2026 audit (`memory/news-audit-2026-04-27.md`) showed Twitter-only, out-of-beat aibtc-network, and quantum homepage-level URLs are deterministic rejections — don't spend tokens composing around them.
 
-- **aibtc-network** — anchor URL MUST be under `github.com/aibtcdev/*`, `aibtc.com/api/*`, or an on-chain tx involving an aibtcdev contract. Stacks L1 events (halvings, STX price, Stacks Endowment grants), third-party Stacks DeFi products (VoltFi, Hermetica, Arkadiko, Zest standalone), xBTC/sBTC migration, and aibtc.news/agent-news internal mechanics DO NOT QUALIFY. If the chatter is ecosystem-adjacent but lacks an aibtcdev artifact, skip — this is the editor's scope rule, not preference.
+- **aibtc-network** — anchor URL MUST be under `github.com/aibtcdev/*` (including `bff-skills-comp`, `tx-schemas`, `x402-sponsor-relay`, `agent-news`, `aibtc-mcp-server`), `aibtc.com/api/*`, or an on-chain tx involving an aibtcdev contract. Stacks L1 events (halvings, STX price, Stacks Endowment grants), third-party Stacks DeFi products (VoltFi, Hermetica, Arkadiko, Zest standalone), xBTC/sBTC migration, and aibtc.news/agent-news internal mechanics without behavioral change DO NOT QUALIFY. If the chatter is ecosystem-adjacent but lacks an aibtcdev artifact, skip — this is the editor's scope rule, not preference.
 - **quantum** — anchor URL MUST be a deep link: arXiv abstract (`https://arxiv.org/abs/NNNN.NNNNN`), specific bitcoin/bips PR or commit (`github.com/bitcoin/bips/{pull,commit}/...`), IACR ePrint (`eprint.iacr.org/YYYY/NNN`), or a dated vendor blog post with measured results. Homepage URLs (`bip360.org/`, `coindesk.com/...article...`) fail source_verification even when the underlying article exists — the editor wants the specific page, not the outlet. Also: if the Google March 30 paper cluster is saturated (check `today` counts from 4a — if >4 quantum signals today reference Google/ECDSA/500k-qubits, the Google-derivative rule trips), skip.
-- **bitcoin-macro** — anchor URL MUST be tier-1: SEC EDGAR filing page, FRED series page, mempool.space API or stat page, Glassnode chart URL, or direct issuer press release. CoinDesk / Decrypt are tier-2 corroboration only and score below threshold if used as sole anchor (probe saw score 60–62/100 with tier-3 sources). F&G / alternative.me readings are not a valid anchor on their own.
+- **bitcoin-macro** — anchor URL MUST be tier-1: mempool.space API or stat page, bitnodes.io snapshot URL, stratumprotocol.org dated stat block, `github.com/bitcoin-core/secp256k1/releases/tag/<tag>` or `github.com/bitcoin/bitcoin/releases/tag/<tag>`, `bitcoinops.org/en/newsletters/YYYY/MM/DD/`, SEC EDGAR filing page, FRED series page, Glassnode chart URL, or direct issuer press release. CoinDesk / Decrypt / Google News RSS are tier-2 corroboration only and score below threshold if used as sole anchor (Cold Cannon's Google News RSS sole-source ETF-flow signal scored 53; institutional probe scored 60–62 on tier-3 alone). F&G / alternative.me readings are not a valid anchor on their own.
 
 Naming the URL is the gate. If the URL doesn't exist yet in your research, go find it before composing — or skip.
 
@@ -343,7 +367,7 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 **Patterns that get rejected** (learned from Sonic Mast's own signal history and the Apr 2026 audit in `memory/news-audit-2026-04-27.md`):
 - Stat readings without a news hook ("X agents registered", "Y sats transacted")
 - Ecosystem cheerleading ("Zest hits $68M TVL", "sBTC TVL reaches $545M")
-- Self-referential competition updates (BFF daily summaries)
+- Self-referential competition updates without a merge event or measurable outcome (filing on a BFF Skills *daily winner* with the merged PR + measured outcome IS valid — it's the format-only summary that fails)
 - Stale rewrites of previously filed topics
 - "Activity continues" framing (conditions persisting is not news)
 - Platform bugs reported as news signals
@@ -362,10 +386,11 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 - Hard data showing a *change* with a clear "so what" (registration surges, bounty board going dark)
 - First-of-their-kind events (new governance tracks, new protocol launches)
 
-**What recent approvals share (reverse-engineered, not a mandate — still aim for alpha others miss):**
-- **bitcoin-macro** — live on-chain metric (mempool.space fees, SEC EDGAR filing, FRED series) + specific numerical impact tied to sBTC / agent ops; 100–140 words; 4–7 tags; 2+ sources with at least one tier-1 primary.
-- **quantum** — arXiv abstract or merged bitcoin/bips commit as the lead source; measured benchmark or shipped code only (no projections, no "could X by 202Y"); 3+ quantum-specific tags; stay clear of saturated clusters.
-- **aibtc-network** — specific `aibtcdev/*` PR URL + commit SHA or API endpoint showing measured outcome; 80–150 words; 6–8 tags; file before 23:00 UTC daily cutoff.
+**What recent approvals share (reverse-engineered from May 2026 approved-50 sample — still aim for alpha others miss):**
+- **bitcoin-macro (telemetry — 93–100 lane)** — primary anchor is a tier-1 telemetry URL (mempool.space API, bitnodes.io snapshot, stratumprotocol stat block, libsecp256k1/bitcoin-core release page, Bitcoin Optech newsletter deep-link) + specific measured number with a delta (signing ops/sec, node share %, pool share %, fee floor, fuse-filter speedup ratio) + a "so what" tied to peg-in / sBTC / agent ops; 100–140 words; 4–7 tags; 2+ sources with at least one tier-1 primary.
+- **bitcoin-macro (institutional — 78–88 lane, fallback)** — SEC EDGAR filing as PRIMARY (not media coverage of the filing), specific dollar/BTC/share number, regulatory or treasury context. Cap-displacement floor is 90 — institutional signals usually need both EDGAR + telemetry to displace.
+- **quantum** — arXiv abstract, IACR ePrint, NIST FIPS page, or merged bitcoin/bips commit as the lead source; measured benchmark or shipped code only (no projections, no "could X by 202Y"); 3+ quantum-specific tags; stay clear of saturated clusters and Google/IBM-derivative angles.
+- **aibtc-network** — specific `aibtcdev/*` PR URL + commit SHA or API endpoint showing measured outcome; BFF Skills competition merge events with daily-winner tie-in score 100; 80–150 words; 6–8 tags; file before 23:00 UTC daily cutoff.
 
 **4d.5. Pre-file gate — HARD BLOCK.** Before composing, run this checklist against your candidate. **Fail any of these and ABORT** — log `news: skip-by-gate` with the failed gate name in run log; don't compose, don't file.
 
