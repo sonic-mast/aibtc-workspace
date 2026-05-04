@@ -47,11 +47,20 @@ You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
 
 Make tool calls immediately. No narration between steps.
 
-### Phase 0: Sync working tree (local only)
+### Phase 0: Sync working tree + set IS_REMOTE flag
 
-Cloud runs are on a transient `claude/keen-ride-*` branch — skip this phase entirely. Detect via `test -f /home/claude/.ssh/commit_signing_key.pub` (true ⇒ remote, skip).
+Cloud runs are on a transient `claude/*` branch — skip the git pull. Detect remote with EITHER signal (the harness branch prefix has changed in the past, so we check both):
 
-On local: `git pull --ff-only origin main 2>/dev/null || true`. Phase 6 of prior runs pushed memory updates straight to `main` via the Contents API, so the local working copy may be behind. Fast-forward only; on conflict, log `notable: "phase0 pull conflict"` and continue.
+```bash
+if [ -f /home/claude/.ssh/commit_signing_key.pub ] || git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q '^claude/'; then
+  IS_REMOTE=1
+else
+  IS_REMOTE=0
+  git pull --ff-only origin main 2>/dev/null || true   # Phase 6 of prior runs pushed memory to main via Contents API; local may be behind. On conflict, log `notable: "phase0 pull conflict"` and continue.
+fi
+```
+
+Reuse `IS_REMOTE` in later phases. Critical: on remote (`IS_REMOTE=1`), the working tree MUST be clean at end of run, otherwise the Claude Code harness auto-commits dirty files to the working branch and opens a stale PR. Phases 3 and 6 each handle their own cleanup.
 
 ### Phase 1: Read state and check inbox
 
@@ -190,7 +199,7 @@ Return ONLY:
 - If the cache is empty or > 2h old, skip Phase 4 entirely with `newsStatus: "api-down"` and append `| api=down` to the final run-line. The daily-digest can surface persistent outages.
 - **Do not retry inline**. The agent-news Cloudflare DNS-cache-overflow issue lasts minutes-to-hours; retries burn tokens for nothing. The Cloudflare Worker heartbeat already pings every 15min — that's the natural retry cadence.
 
-On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `automation-state/news-status-cache.json` (overwrite — single record, not a log).
+On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `automation-state/news-status-cache.json` (overwrite — single record, not a log). **Skip the disk write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway, and writing the file on remote dirties the working tree and triggers a stale auto-PR.
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
 Set `newsLastQuotaCheck`, `newsSignalsToday`, and `newsLeaderboard` (store as-is in state).
@@ -772,9 +781,11 @@ The goal is continuous improvement: your approval rate should trend upward over 
        -H "Content-Type: application/json" \
        "https://api.github.com/repos/$OWNER/$REPO/contents/$f" -d "$BODY" >/dev/null
    done
+   # Remote: discard the in-place edits now that the Contents API has them. Otherwise the harness auto-PRs the same content from the working branch.
+   if [ "$IS_REMOTE" = "1" ]; then git checkout -- MEMORY.md memory/ 2>/dev/null || true; fi
    ```
 
-   Notes: `base64 -w0` is GNU; macOS `base64` has no `-w` flag, so the fallback strips newlines. Each file is a separate commit — that's fine for memory. After the routine pushes, the local working copy is behind `main`; the next run's Phase 1 should `git pull --ff-only` before work.
+   Notes: `base64 -w0` is GNU; macOS `base64` has no `-w` flag, so the fallback strips newlines. Each file is a separate commit — that's fine for memory. After the routine pushes, the local working copy is behind `main`; the next run's Phase 0 fast-forwards via `git pull --ff-only`.
 
 **Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
 
