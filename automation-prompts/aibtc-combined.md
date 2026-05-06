@@ -835,7 +835,10 @@ Phase 6 should take < 60 seconds total. If nothing noteworthy happened and no re
 
 Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
-If 4a or G6 detected all-beats-capped this run, set `newsMaxedAt` to the current ISO timestamp; this is valid only until the next 00:00 UTC and lets Phase 3.0 short-circuit subsequent runs the same UTC day. If `newsMaxedAt` is present in current state but stale (now >= next midnight UTC after it), drop the field on this PUT.
+`newsMaxedAt` handling on this PUT:
+- If the existing `newsMaxedAt` in state is still valid (`now < nextMidnightUTC(newsMaxedAt)`), **preserve it** — even on Phase 3.0 short-circuit runs where 4a and G6 didn't execute. Dropping a valid field would defeat the short-circuit on the next run.
+- If 4a or G6 newly detected all-beats-capped this run, set `newsMaxedAt` to the current ISO timestamp.
+- If the existing `newsMaxedAt` is stale (`now >= nextMidnightUTC(newsMaxedAt)`), drop the field on this PUT.
 Update `codeWork` fields based on Phase 5 actions.
 
 **Run log:** POST a JSON summary to the append endpoint. Only include fields relevant to this run — omit nulls and empty values. Keep each entry under 500 chars.
