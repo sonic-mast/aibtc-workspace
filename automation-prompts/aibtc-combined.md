@@ -177,10 +177,12 @@ If `last_author == "sonic-mast"`, skip per rule 2. Otherwise apply rules 3–5.
 
 ### Phase 3: News quota check
 
-**3.0 newsMaxedAt short-circuit (BEFORE any API calls).** Read `newsMaxedAt` from state. If present and `now < nextMidnightUTC(newsMaxedAt)` (i.e., the timestamp is from earlier today UTC), all three beats are still globally capped from a prior run this UTC day. Skip Phase 3 + Phase 4 entirely:
-- Set `newsStatus: "maxed"`.
-- Log run-line `news=maxed`, no `news_check_status` call, no inventory pulls.
-- Proceed straight to Phase 5.
+**3.0 newsMaxedAt short-circuit (BEFORE any API calls).** Read `newsMaxedAt` from state. If present and `now < nextMidnightUTC(newsMaxedAt)` (i.e., the timestamp is from earlier today UTC), all three beats are still globally capped from a prior run this UTC day. Skip the expensive parts of Phase 3 + Phase 4:
+- Set `newsStatus: "maxed"` and `newsEligible: false`.
+- Skip the `news_check_status` / `news_leaderboard` sub-task (Phase 3 main).
+- Skip Phase 4a–4e entirely (no beat-counts call, no inventory pulls, no filing).
+- **Still run Phase 4f corrections** — corrections don't consume beat caps and remain valuable when others' factual errors are filable.
+- Log run-line `news=maxed`, then proceed to Phase 5.
 
 If `newsMaxedAt` is stale (>= next 00:00 UTC after the timestamp) or absent, clear it on the next state PATCH and proceed normally. Beat caps reset at 00:00 UTC daily, so the field is only valid within the same UTC day.
 
@@ -418,7 +420,7 @@ The Apr 2026 audit (`memory/news-audit-2026-04-27.md`) shows 66% rejection rate 
 | **G3: quantum scope** | If `beat_slug == "quantum"`, is the headline a governance debate (BIP-361 freeze, Adam Back / Drak posture, "tripwire", coin-freeze, fork debates)? | If yes → ABORT. Hardware milestones, formal BIP merges, arXiv papers ONLY. |
 | **G4: quantum dedup cluster** | If `beat_slug == "quantum"`, count today's signals on the same paper/PR/cluster (Google ECDSA/500k-qubits, BIP-360, etc.). | If ≥4 → ABORT (4-per-cluster cap). |
 | **G5: bitcoin-macro tier-1 anchor** | If `beat_slug == "bitcoin-macro"`, is the primary anchor SEC EDGAR / FRED / mempool.space / Glassnode / direct issuer release? | If no → ABORT. CoinDesk/Decrypt/F&G alone score ≤60. |
-| **G6: cap saturation** | Pull `today` counts from 4a. Is `approved == dailyApprovedLimit` (10) on the chosen beat? | If yes → ABORT. Score-83 signals get displaced; you'd need ≥105 to displace approved 90s. If G6 trips after rotation forced you off other beats (e.g. via G7 cross-agent dedup or `coolUntil`), so no beat remains fileable this run, also PATCH `newsMaxedAt: <ISO>` to short-circuit subsequent runs through 00:00 UTC. |
+| **G6: cap saturation** | Pull `today` counts from 4a. Is `approved == dailyApprovedLimit` (10) on the chosen beat? | If yes → ABORT. Score-83 signals get displaced; you'd need ≥105 to displace approved 90s. Do NOT set `newsMaxedAt` here — if 4a's all-beats-capped check did not fire, at least one beat has global capacity, so other beats may still be fileable on a future run (G7 cross-agent dedup is per-URL; `coolUntil` is agent-specific and expires). The 4a all-capped check is the only correct setter. |
 | **G7: cross-agent dedup** | Does any signal in `today` (any beat) reference the same primary URL or issue/PR number? | If yes → ABORT. Editors reject duplicate same-day coverage. |
 | **G8: daily file rate** | Count own signals filed today (`mine` from 4a, status != "rejected"). Is it ≥ 2? | If yes → ABORT. Quality > volume; max 2 successful files/day. |
 | **G9: stat-vs-event** | Does the headline describe a stat reading ("X is at Y") rather than an event ("X did Z")? | If yes → ABORT. See 4d question 1. |
@@ -463,7 +465,7 @@ If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if 
 
 ### Phase 4f: Corrections (conditional)
 
-Only if `newsEligible` was true this run (Phase 4 was not skipped entirely).
+Run unless `newsStatus` is `api-down` this run. Corrections do NOT consume beat caps, so this phase runs even when Phase 3.0 short-circuited on `newsMaxedAt` and even when Phase 4a aborted on all-beats-capped.
 
 Launch an Agent sub-task (read-only template) that calls `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
 
@@ -837,7 +839,7 @@ Build full state object, write to /tmp/state.json, PUT to state API.
 If a signal was filed this run, set `lastNewsFiledAt` to the current ISO timestamp.
 `newsMaxedAt` handling on this PUT:
 - If the existing `newsMaxedAt` in state is still valid (`now < nextMidnightUTC(newsMaxedAt)`), **preserve it** — even on Phase 3.0 short-circuit runs where 4a and G6 didn't execute. Dropping a valid field would defeat the short-circuit on the next run.
-- If 4a or G6 newly detected all-beats-capped this run, set `newsMaxedAt` to the current ISO timestamp.
+- If 4a newly detected all-beats-capped this run (the only correct setter — see G6 row in 4d.5), set `newsMaxedAt` to the current ISO timestamp.
 - If the existing `newsMaxedAt` is stale (`now >= nextMidnightUTC(newsMaxedAt)`), drop the field on this PUT.
 Update `codeWork` fields based on Phase 5 actions.
 
