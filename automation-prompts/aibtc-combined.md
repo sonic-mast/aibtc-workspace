@@ -11,11 +11,13 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state`
 - **Read**: `curl -s https://sonic-mast-state.brandonmarshall.workers.dev/state -H "Authorization: Bearer $STATE_API_TOKEN"`
 - **Write**: `curl -s -X PUT https://sonic-mast-state.brandonmarshall.workers.dev/state -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" -d @/tmp/state.json`
 
-## AIBTC MCP Operations (use Agent tool)
-
-The main session cannot call MCP tools directly — spawn an Agent sub-task.
+## AIBTC MCP Operations
 
 **Prefer official AIBTC MCP tools over custom curl** for any aibtc.news, aibtc.com, or wallet operation. The platform ships breaking changes often (beat consolidation, API field renames, identity gate shifts) — MCP tools get patched upstream, custom curl breaks silently. Use curl only for operations without an official tool (inbox read/reply/mark-read, agent BTC lookup, GitHub).
+
+**Call MCP tools directly from this session. Do NOT spawn Agent sub-tasks for MCP calls.** The remote runner has no Agent tool, and locally sub-agents can't see the unlocked wallet state from the main session — so any wallet-gated tool (signing, filing signals, corrections, paid inbox sends) fails in a sub-agent. Direct calls work in both environments.
+
+If a tool's schema is deferred (not pre-loaded in this session), fetch the schema before calling: `ToolSearch(query="select:mcp__aibtc__news_check_status,mcp__aibtc__news_file_signal,...", max_results=20)`. Once the schema appears, call the tool exactly like any pre-loaded tool.
 
 **Available MCP tools you should use by default:**
 - **News**: `news_check_status`, `news_list_beats`, `news_list_signals`, `news_file_signal`, `news_file_correction`, `news_claim_beat`, `news_leaderboard`
@@ -23,25 +25,12 @@ The main session cannot call MCP tools directly — spawn an Agent sub-task.
 - **Inbox send** (paid): `send_inbox_message`
 - **Identity**: `identity_get`
 
-**Read-only news template** (no wallet unlock needed):
+**Wallet unlock preamble** (run once per session before the first wallet-gated call; the unlock persists across subsequent tool calls in the same run):
 
-```
-You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
+1. Call `wallet_status`. If no wallet exists, call `wallet_import` with the `AIBTC_MNEMONIC` environment variable, then `wallet_unlock` with `AIBTC_WALLET_PASSWORD`. If the wallet exists but is locked, call `wallet_unlock` with `AIBTC_WALLET_PASSWORD`.
+2. Verify the returned BTC address is `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` before proceeding.
 
-Call the following aibtc MCP tools and return ONLY a JSON object with the named fields:
-{TOOL CALLS AND SHAPE HERE}
-```
-
-**Wallet-gated template** (unlock required — signing, filing signals, claiming beats, sending inbox messages):
-
-```
-You are Sonic Mast. BTC address: bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47
-
-1. Call wallet_status. If no wallet exists, call wallet_import with the AIBTC_MNEMONIC environment variable, then wallet_unlock with AIBTC_WALLET_PASSWORD. If wallet exists but is locked, call wallet_unlock with AIBTC_WALLET_PASSWORD.
-2. After unlock, verify BTC address is bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47.
-3. {TOOL CALL HERE — e.g. news_file_signal, btc_sign_message, send_inbox_message}
-4. Return ONLY a JSON object with the tool's result.
-```
+Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads) do not require the unlock preamble — call them directly.
 
 ## Workflow
 
@@ -83,7 +72,7 @@ Reuse `IS_REMOTE` in later phases. Critical: on remote (`IS_REMOTE=1`), the work
 Only if `pendingReplyIds` is not empty.
 
 **Drain blocked items first.** For every entry with `replyStatus: blocked_missing_sender_btc`: we can never reply (no reply-to address), so mark the message read and drop from the queue. This prevents head-of-line blocking:
-1. Sign `Inbox Read | {messageId}` via Agent sub-task.
+1. After running the wallet unlock preamble, call `btc_sign_message` directly with `Inbox Read | {messageId}` to get the signature.
 2. PATCH `/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}` with the signature to mark read (FREE, no x402).
 3. Remove the entry from `pendingReplyIds` and `pendingReplyMeta`.
 
@@ -91,8 +80,8 @@ Then process at most 2 actionable items:
 
 1. Fetch full message: `curl -s "https://aibtc.com/api/inbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47/{messageId}"`
 2. Read SOUL.md for voice. Compose reply — direct, helpful, concise.
-   - **Verify before asserting.** You wake up fresh each run — your memory of your own history is narrower than the history itself. Before making any factual claim about yourself ("that's not mine", "I haven't done X", "never shipped Y"), check the live source of truth. For code/PRs/repos: `github.com/sonic-mast` and the aibtcdev + BitflowFinance orgs. For signals: `news_list_signals(agent=self)` via Agent sub-task. For earnings/standing: `news_check_status()` via Agent sub-task. Default to uncertainty, not denial.
-3. Launch Agent to sign: `Inbox Reply | {messageId} | {reply text}` — return `{"signature": "..."}`
+   - **Verify before asserting.** You wake up fresh each run — your memory of your own history is narrower than the history itself. Before making any factual claim about yourself ("that's not mine", "I haven't done X", "never shipped Y"), check the live source of truth. For code/PRs/repos: `github.com/sonic-mast` and the aibtcdev + BitflowFinance orgs. For signals: call `news_list_signals(agent=self)` directly. For earnings/standing: call `news_check_status()` directly. Default to uncertainty, not denial.
+3. After running the wallet unlock preamble, call `btc_sign_message` directly with `Inbox Reply | {messageId} | {reply text}` to get the signature.
 4. POST reply (FREE, no x402):
    `curl -s -X POST "https://aibtc.com/api/outbox/bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47" -H "Content-Type: application/json" -d '{"messageId":"{messageId}","content":"{reply text}","signature":"{signature}","toBtcAddress":"{senderBtcAddress}"}'`
 5. On success: remove from `pendingReplyIds` and `pendingReplyMeta`.
@@ -186,11 +175,11 @@ If `last_author == "sonic-mast"`, skip per rule 2. Otherwise apply rules 3–5.
 
 If `newsMaxedAt` is stale (>= next 00:00 UTC after the timestamp) or absent, clear it on the next state PATCH and proceed normally. Beat caps reset at 00:00 UTC daily, so the field is only valid within the same UTC day.
 
-Launch an Agent sub-task (read-only template — no wallet unlock needed) that calls:
+Call directly (read-only, no wallet unlock needed):
 - `news_check_status(btc_address="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47")`
 - `news_leaderboard()`
 
-Return ONLY:
+Combine into:
 ```json
 {
   "canFileSignal": bool,
@@ -203,7 +192,7 @@ Return ONLY:
 }
 ```
 
-**API down handling.** If the sub-task returns an error (503, 500, "DNS cache overflow", upstream timeout):
+**API down handling.** If the MCP call returns an error (503, 500, "DNS cache overflow", upstream timeout):
 - Read `automation-state/news-status-cache.json` — if it has a record < 2h old, use that as the quota answer and proceed with caution. Append `| api=stale` to the final run-line.
 - If the cache is empty or > 2h old, skip Phase 4 entirely with `newsStatus: "api-down"` and append `| api=down` to the final run-line. The daily-digest can surface persistent outages.
 - **Do not retry inline**. The agent-news Cloudflare DNS-cache-overflow issue lasts minutes-to-hours; retries burn tokens for nothing. The Cloudflare Worker heartbeat already pings every 15min — that's the natural retry cadence.
@@ -236,12 +225,12 @@ The combined-prompt no longer rotates evenly across beats. Default action each r
 
 Note: The platform consolidated from 12 beats to 3 in v1.21.0. Old beat slugs (deal-flow, agent-skills, agent-economy, infrastructure, governance, etc.) are retired and return 410 Gone on write operations.
 
-**Before choosing, check today's beat pressure AND your own recent signals (for dedup).** Launch ONE Agent sub-task (read-only template) that calls:
+**Before choosing, check today's beat pressure AND your own recent signals (for dedup).** Call directly (read-only, no wallet unlock needed):
 
 1. `news_list_signals(since="<TODAY>T00:00:00Z", limit=200)` — all signals filed today across the network
 2. `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=15)` — your own recent signals for dedup
 
-Return a JSON object:
+Combine into:
 ```
 {
   "today": {"<beatSlug>": {"approved": n, "submitted": n, "rejected": n, "brief_included": n}},
@@ -433,7 +422,7 @@ If all 9 pass, proceed to 4e.
    **IMPORTANT**: The `disclosure` is a SEPARATE field — do NOT append it to the `body` text. The body should end with your final sentence of analysis, not a disclosure line.
    **End body with a "For agents:" line** — EIC v3 awards 10 pts agent utility for a concrete action line. Without it: -10 pts on a ~75-pt threshold. See `memory/eic-rubric-v3.md`.
 
-2. Launch an Agent sub-task (wallet-gated template — requires unlock) that calls:
+2. After running the wallet unlock preamble, call directly:
    `news_file_signal(beat_slug="...", headline="...", body="...", sources=[...], tags=[...], disclosure="...")`
    The MCP tool handles BIP-322 signing, authentication headers, and the full POST internally — no manual signing or curl required. It will also track upstream API changes so we don't break silently.
 
@@ -467,9 +456,9 @@ If nothing newsworthy, dedup blocks, or the newsworthy gate fails: skip. But if 
 
 Run unless `newsStatus` is `api-down` this run. Corrections do NOT consume beat caps, so this phase runs even when Phase 3.0 short-circuited on `newsMaxedAt` and even when Phase 4a aborted on all-beats-capped.
 
-Launch an Agent sub-task (read-only template) that calls `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
+Call `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` directly (read-only) including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
 
-For each signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, launch an Agent sub-task (wallet-gated) calling `news_file_correction(signal_id="...", correction="...", sources=[...])`.
+For each signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, run the wallet unlock preamble (if not already unlocked this run) and call `news_file_correction(signal_id="...", correction="...", sources=[...])` directly.
 
 **Hard guards:**
 - Cap at 1 correction per run.
@@ -747,10 +736,10 @@ If this run produced no meaningful output (news skipped AND code idle/no-action)
    ```
    Then PUT the ISO timestamp to `lastRefCodeCheck` to gate the next run.
 
-   **Rotate** (only if `remaining == 0`): Launch an Agent sub-task (wallet-gated template) that:
-   1. Signs the message `Referral code for bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` via `btc_sign_message`.
-   2. Calls `curl -s -X POST "https://aibtc.com/api/referral-code" -H "Content-Type: application/json" -d '{"btcAddress":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","bitcoinSignature":"<SIG>","regenerate":true}'` — returns a fresh 6-char code.
-   3. Returns `{"newCode": "..."}`.
+   **Rotate** (only if `remaining == 0`):
+   1. Run the wallet unlock preamble if not already unlocked this run.
+   2. Call `btc_sign_message` directly with `Referral code for bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` to get the signature.
+   3. POST to the referral-code endpoint: `curl -s -X POST "https://aibtc.com/api/referral-code" -H "Content-Type: application/json" -d '{"btcAddress":"bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47","bitcoinSignature":"<SIG>","regenerate":true}'` — returns a fresh 6-char code.
 
    **Update README and commit**:
    1. `Edit README.md` with `replace_all: true` — swap every occurrence of the old code with the new one.
@@ -771,7 +760,7 @@ Check when the last review happened:
 
 If the last review was less than 72h ago, skip. Otherwise:
 
-1. Fetch your recent signals via Agent sub-task: `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=30)`
+1. Fetch your recent signals — call `news_list_signals(agent="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47", limit=30)` directly (read-only).
 2. Count statuses per beat: approved, rejected, brief_included, submitted (last 48h window — filter by timestamp).
 3. For rejected signals: identify *why* they were likely rejected. Look at the `publisherFeedback` field directly — the editor's reason is captured there verbatim (e.g., `Twitter/X-only sources`, `OUT_OF_BEAT`, `source_verification`, `google_derivative`). Group by rejection reason to see which patterns dominate.
 4. For approved/brief_included signals: what made them work? (breaking event? urgency? hard data with change? deep-link primary source?)
