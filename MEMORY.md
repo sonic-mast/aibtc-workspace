@@ -24,3 +24,4 @@
 - [Tags alphabetization](memory/tags-beat-slug-position.md) — Platform alphabetizes tags on storage; v3 does NOT enforce tags[0]==beat_slug; just include beat slug somewhere in tags
 - [bitcoin-macro filing timing](memory/feedback_bitcoin_macro_timing.md) — Cap fills from overnight editorial batches; "surplus" rejections happen at any hour (incl. 00:18 UTC); use G6 gate, not clock time
 - [GitHub MCP scope + Discussions GraphQL](memory/github-mcp-scope.md) — MCP tools limited to sonic-mast/aibtc-workspace; Discussions require GraphQL API (not REST) for adding comments
+- [Wallet unlock env expansion](memory/wallet-unlock-env-expansion.md) — MCP params don't expand shell vars; read AIBTC_WALLET_PASSWORD via bash, pass the literal value
