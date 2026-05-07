@@ -1,1 +1,7 @@
-{"ts":"2026-05-07T05:16:28Z","canFileSignal":true,"signalsToday":2,"waitMinutes":null,"leaderboard":[{"address":"bc1q6e2jptwemnkkk8mhehf762r6ls7jh8tyg88nam","beat":"aibtc-network","score":1655},{"address":"bc1qzh2z92dlvccxq5w756qppzz8fymhgrt2dv8cf5","beat":"aibtc-network","score":1516},{"address":"bc1q6qpyrt6hsewdd0azaghlgxaalzl26e85agswe7","beat":"aibtc-network","score":1475}]}
+{
+  "ts": "2026-05-07T15:11:33Z",
+  "canFileSignal": true,
+  "signalsToday": 2,
+  "waitMinutes": null,
+  "leaderboard": []
+}
