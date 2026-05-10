@@ -458,15 +458,30 @@ Run unless `newsStatus` is `api-down` this run. Corrections do NOT consume beat 
 
 Call `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` directly (read-only) including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
 
-For each signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, run the wallet unlock preamble (if not already unlocked this run) and call `news_file_correction(signal_id="...", correction="...", sources=[...])` directly.
+**Cross-run dedup** (do this before scanning candidates): fetch today's already-filed correction list:
+```
+TODAY=$(date -u +%Y-%m-%d)
+FILED=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/correctionsFiled-$TODAY")
+```
+`FILED` is a JSON array of `signalId` strings (or empty/null if no corrections filed today). Skip any candidate whose `signalId` appears in `FILED` — re-filing the same correction is the biggest efficiency drain on this loop.
+
+For each remaining signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, run the wallet unlock preamble (if not already unlocked this run) and call `news_file_correction(signal_id="...", correction="...", sources=[...])` directly.
+
+**On successful file**, append the signalId to today's list:
+```
+curl -s -X POST -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://sonic-mast-state.brandonmarshall.workers.dev/kv/correctionsFiled-$TODAY/append" \
+  -d '"<signalId>"'
+```
 
 **Hard guards:**
 - Cap at 1 correction per run.
 - You must have the contradicting URL before filing — "seems wrong" is not a correction.
 - Do not file corrections on signals that are merely imprecise, out-of-date, or using a weaker source than you would use. The factual claim must be demonstrably false against a primary source.
 - **Verify `signalId` exists** in the `news_list_signals` payload you just fetched. If the candidate signalId isn't in the today-window list, skip — the API returns 404 on stale IDs. Log `correction: "404 stale-id"` and move on.
+- **Skip if signalId is in `correctionsFiled-$TODAY`** — already filed this day, re-filing is wasteful.
 
-Log in run log as `correction: { signalId, headline }` if filed, or `correction: "none"` if nothing found.
+Log in run log as `correction: { signalId, headline }` if filed, `correction: "skipped-already-filed"` if dedup'd, or `correction: "none"` if nothing found.
 
 ### Phase 5: Code work (conditional)
 
