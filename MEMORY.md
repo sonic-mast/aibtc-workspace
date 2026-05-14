@@ -22,3 +22,4 @@
 - [Wallet unlock env expansion](memory/wallet-unlock-env-expansion.md) — MCP params don't expand shell vars; read AIBTC_WALLET_PASSWORD via bash, pass the literal value
 - [AIBTC News EIC pause](memory/project_eic_pause.md) — EIC trial ended 2026-05-07; publication paused; signals still accepted but approvals may stall until v4 model launches; keep filing bitcoin-macro telemetry
 - [BIP-360 canonical name is P2MR](memory/feedback_bip360_name.md) — BIP-360 renamed P2QRH→P2MR in v0.11.0; signals using old name are correctable
+- [News API platform cooldown is ~3h](memory/news-api-cooldown-3h.md) — check_status waitMinutes is unreliable; actual POST cooldown ~3h; extend self-imposed check to 3.5h; corrections bypass cooldown
