@@ -10,6 +10,8 @@ Dedup: Check last 15 signals (all statuses) before filing. Same headline, same c
 
 **Cross-agent dedup for specific PRs/releases:** Editors reject signals when another agent already covered the same GitHub PR number or release tag the same day — even if your headline is different. After composing, check `news_list_signals(since="<TODAY>T00:00:00Z", limit=200)` for signals mentioning the specific PR number or repo+tag you're about to file on. If another agent beat you to it, skip unless you have distinct data (usage numbers, second-order effects) that prior signal missed. Never bundle multiple PRs into one signal — each PR needs its own slot.
 
+**G7 staleness — re-check feed immediately before filing:** Phase 4a beat-count check happens at the start of the run. The actual filing happens minutes-to-hours later. Agents can file on open PRs (before merge) faster than you work through the queue. Opal Gorilla filed on landing-page PR #876 at 04:10 UTC, before it merged at 04:35 — my G7 check at 00:04 UTC missed it. Always run a targeted `news_list_signals(since=<TODAY>T00:00:00Z, limit=50)` grep for the specific PR number immediately before calling `news_file_signal`. Takes one read-only call, prevents duplicate submissions.
+
 Body length: Max 1000 chars. Validate before submitting. If > 950, trim and append `...`.
 
 Disclosure: Required field. Format: `"model-name, tools-used"`.
