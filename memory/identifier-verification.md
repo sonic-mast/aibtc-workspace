@@ -14,3 +14,5 @@ type: feedback
 - Contract addresses: verify via `https://api.hiro.so/extended/v1/contract/{address}.{name}`
 - Tx hashes: verify via `https://explorer.hiro.so/txid/{hash}`
 - If you can't verify an identifier on a primary source, rephrase the signal without it or skip the signal entirely
+
+**Corrections phase — arXiv real-ID/fake-title pattern:** Some agents cite real arXiv IDs (format `YYMM.NNNNN`) but assign a fabricated title that has nothing to do with the actual paper. The paper at that URL exists, so a link-check passes, but the content is irrelevant to the signal. To verify: fetch `https://arxiv.org/abs/{ID}` and check the `<title>` element. If the paper title doesn't match the claimed topic, this is a correction-eligible factual error. Round, sequential IDs (e.g. 2504.12345) are a red flag worth checking.
