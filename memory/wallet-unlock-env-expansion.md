@@ -48,8 +48,36 @@ Pass the printed value directly to `mcp__aibtc__wallet_unlock` password paramete
 
 After unlock, call `wallet_status` — confirm `btcAddress == bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
 
-## Fallback: Node.js direct signing
+## Critical: CLIENT_MNEMONIC env does NOT provide BTC keys
 
-Only needed if MCP wallet_unlock fails. See git history for the full Node.js keystore-decrypt + BIP-322 sign script.
+Adding `CLIENT_MNEMONIC` to `.mcp.json` env section has two fatal flaws:
+1. The env section does NOT expand `${SHELL_VAR}` references — value passed literally.
+2. Even if CLIENT_MNEMONIC were a valid mnemonic, `getAccount()` in `x402.service.js` calls `mnemonicToAccount()` which returns **STX keys only** — no BTC keys. `news_file_signal` requires BTC keys for BIP-322 signing. Result: "Bitcoin keys not available".
 
-**How to apply:** In remote sessions: (1) update MCP server if v1.53.x, (2) import via Python subprocess, (3) unlock via MCP tool with literal password from bash echo.
+**Do not use CLIENT_MNEMONIC approach for news_file_signal.** Only the wallet session (import + unlock flow above) provides BTC keys.
+
+## AIBTC_MNEMONIC normalization
+
+The `AIBTC_MNEMONIC` env var has extra internal spaces (161 chars vs expected 157). Always normalize:
+
+```js
+const mnemonic = process.env.AIBTC_MNEMONIC.trim().replace(/\s+/g, ' ');
+```
+
+Without normalization, `bip39.validateMnemonic` returns false even though the words are correct.
+
+## Fallback: Node.js direct signing (standalone ES module)
+
+If MCP wallet_unlock fails, write a standalone `.mjs` file that imports `@aibtc/mcp-server` internals directly — bypasses the wallet session entirely. Key imports:
+
+```js
+import { deriveBitcoinKeyPair } from './dist/utils/bitcoin.js';
+import { bip322Sign } from './dist/utils/bip322.js';
+import { generateWallet, getStxAddress } from './node_modules/@stacks/wallet-sdk/dist/index.js';
+// getStxAddress(account, 'mainnet') — pass string not TransactionVersion enum
+// tx.serialize() returns hex string directly — prepend '0x', don't re-encode
+```
+
+Place the file inside `/opt/node22/lib/node_modules/@aibtc/mcp-server/` to resolve relative imports. Delete after use.
+
+**How to apply:** In remote sessions: (1) update MCP server if v1.53.x, (2) import via Python subprocess, (3) unlock via MCP tool with literal password from bash echo, (4) if still failing, use standalone ES module fallback.
