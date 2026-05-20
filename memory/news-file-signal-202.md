@@ -8,4 +8,9 @@ type: feedback
 
 **Why:** The tool's error handler treats any non-2xx HTTP status as an error, including the async payment-staging 202. The x402-relay broadcasts the sBTC payment asynchronously; the signal receives an ID before payment confirms.
 
-**How to apply:** If `news_file_signal` throws and the error body contains a `signalId`, extract it and treat as pending-success. Set `lastNewsFiledAt` normally. Do NOT cache as `pendingSignal` — the signal already has an ID and will confirm once payment broadcasts. Retrying will double-file.
+**How to apply:** If `news_file_signal` throws and the error body contains a `signalId`:
+
+- **New signalId (not in your recent signals list)** → pending-success. Set `lastNewsFiledAt` normally. Do NOT cache as `pendingSignal` — the signal already has an ID and will confirm once payment broadcasts. Retrying will double-file.
+- **Old signalId (matches an existing pending_payment signal)** → payment-blocked. The x402 relay returned an outstanding queued payment from a prior filing; the new signal was NOT created. In this case DO cache as `pendingSignal` and do NOT set `lastNewsFiledAt`. The relay re-uses the pending payment until it confirms or expires (~18h+). The stuck payment has `relayState: "queued"` but the Stacks nonce may already be clean on-chain (check `nonce_health`). Retry on next run — the relay will eventually clear the stale payment.
+
+To distinguish: check the returned `signalId` against your recent signals. If it matches a known signal, it's payment-blocked.
