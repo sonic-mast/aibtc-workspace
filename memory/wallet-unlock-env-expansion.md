@@ -6,7 +6,19 @@ type: feedback
 
 MCP tool calls take literal string values — env var placeholders are passed verbatim, not shell-expanded.
 
-## Step 1 — Import wallet (subprocess + JSON-RPC)
+## Simplest approach (confirmed 2026-05-21)
+
+1. Read the mnemonic via bash first:
+   ```bash
+   python3 -c "import os; print(os.environ.get('AIBTC_MNEMONIC','').strip())"
+   ```
+2. Pass the printed value directly to `mcp__aibtc__wallet_import` as the `mnemonic` parameter.
+3. Pass `${AIBTC_WALLET_PASSWORD}` **literally** as the `password` parameter — both import and unlock accept the same literal, so they match and the session works.
+4. Call `mcp__aibtc__wallet_unlock` with `password: "${AIBTC_WALLET_PASSWORD}"` (same literal).
+
+This is faster than the subprocess method and works with v1.54.0+. The wallet is encrypted with the literal string `${AIBTC_WALLET_PASSWORD}` for the session, which is fine since remote envs are ephemeral.
+
+## Step 1 — Import wallet (subprocess + JSON-RPC, legacy method)
 
 **First check installed version.** v1.53.0 rejects valid BIP39 mnemonics with `WALLET_ERROR` even after normalization. Update before importing:
 
