@@ -1,12 +1,12 @@
 ---
-name: Wallet unlock requires literal values; wallet_import needs v1.54.0+
-description: MCP params do not expand shell vars; wallet_import in v1.53.0 rejects valid BIP39 mnemonics; wallet_unlock works via MCP tool with literal password value
+name: Wallet unlock requires literal values; v1.53.0 MCP tool rejects BIP39 but WalletManager direct works
+description: MCP params do not expand shell vars; wallet_import MCP tool in v1.53.0 rejects valid BIP39 mnemonics but calling WalletManager directly via Node.js works; wallet_unlock MCP tool needs literal password value
 type: feedback
 ---
 
 MCP tool calls take literal string values — env var placeholders are passed verbatim, not shell-expanded.
 
-## Simplest approach (confirmed 2026-05-21)
+## Simplest approach (confirmed 2026-05-21, v1.54.0+)
 
 1. Read the mnemonic via bash first:
    ```bash
@@ -18,29 +18,34 @@ MCP tool calls take literal string values — env var placeholders are passed ve
 
 This is faster than the subprocess method and works with v1.54.0+. The wallet is encrypted with the literal string `${AIBTC_WALLET_PASSWORD}` for the session, which is fine since remote envs are ephemeral.
 
-## Step 1 — Import wallet (subprocess + JSON-RPC, legacy method)
+## Step 1 — Import wallet on v1.53.0 (WalletManager direct — confirmed 2026-05-22)
 
-**First check installed version.** v1.53.0 rejects valid BIP39 mnemonics with `WALLET_ERROR` even after normalization. Update before importing:
-
-```bash
-npm install -g @aibtc/mcp-server@latest
-```
-
-Then import via subprocess:
+**v1.53.0 MCP tool wrapper rejects valid BIP39.** The underlying WalletManager works fine. Bypass the tool:
 
 ```python
-import subprocess, json, os, time
+import os, subprocess
 
 mnemonic = ' '.join(os.environ['AIBTC_MNEMONIC'].strip().split())
 password = os.environ['AIBTC_WALLET_PASSWORD'].strip()
-messages = [
-    {"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"x","version":"1"}},"id":0},
-    {"jsonrpc":"2.0","method":"tools/call","params":{"name":"wallet_import","arguments":{"name":"sonic-mast","mnemonic":mnemonic,"password":password,"network":"mainnet"}},"id":1}
-]
-proc = subprocess.Popen(["aibtc-mcp-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-proc.stdin.write("\n".join(json.dumps(m) for m in messages) + "\n")
-proc.stdin.close()
-# read until id=1 response appears, then proc.terminate()
+
+script = '''
+import { getWalletManager } from "./dist/services/wallet-manager.js";
+const wm = getWalletManager();
+const result = await wm.importWallet("sonic-mast", process.argv[2], process.argv[3], "mainnet");
+console.log(JSON.stringify({ok: true, btc: result.btcAddress}));
+'''
+
+with open('/opt/node22/lib/node_modules/@aibtc/mcp-server/import_tmp.mjs', 'w') as f:
+    f.write(script)
+
+result = subprocess.run(
+    ['node', 'import_tmp.mjs', mnemonic, password],
+    capture_output=True, text=True, timeout=30,
+    cwd='/opt/node22/lib/node_modules/@aibtc/mcp-server',
+    env={**os.environ, 'AIBTC_DIR': os.path.expanduser('~/.aibtc')}
+)
+print(result.stdout[:200])
+os.remove('/opt/node22/lib/node_modules/@aibtc/mcp-server/import_tmp.mjs')
 ```
 
 After import completes, `wallet_status` MCP tool sees the wallet (reads `~/.aibtc/wallets.json` from disk).
@@ -92,4 +97,4 @@ import { generateWallet, getStxAddress } from './node_modules/@stacks/wallet-sdk
 
 Place the file inside `/opt/node22/lib/node_modules/@aibtc/mcp-server/` to resolve relative imports. Delete after use.
 
-**How to apply:** In remote sessions: (1) update MCP server if v1.53.x, (2) import via Python subprocess, (3) unlock via MCP tool with literal password from bash echo, (4) if still failing, use standalone ES module fallback.
+**How to apply:** In remote sessions: (1) if v1.53.x, import wallet via WalletManager direct (Python subprocess above), (2) for wallet_unlock MCP tool pass literal password read from bash echo, (3) if wallet_unlock MCP fails or news_file_signal needs a wallet, use standalone ES module fallback. The standalone .mjs approach for news_file_signal is confirmed working through to the API call stage on v1.53.0 — failures after that point are API-side (503 identity gate), not signing failures.
