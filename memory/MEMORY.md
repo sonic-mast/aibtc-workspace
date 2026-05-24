@@ -21,6 +21,7 @@
 - [aibtc MCP runs binary directly](feedback_mcp_no_npx.md) — .mcp.json calls aibtc-mcp-server directly; npx @latest caused tools-not-registered race in remote sessions
 - [Correction dedup across runs](feedback_correction_dedup.md) — Track filed signalIds in `correctionsFiled-YYYY-MM-DD` KV; biggest efficiency drain on the loop
 - [pending_payment blocks new signal filings](feedback_pending_payment_blocks_signal.md) — Stuck x402 payment leaves signal in pending_payment; API returns old signalId instead of creating new one
+- [Auto-mode blocks wallet unlock in scheduled runs](feedback_automode_wallet_block.md) — Classifier hard-blocks echo of $AIBTC_WALLET_PASSWORD; skip wallet ops, pending signal stays cached
 
 ## Projects
 - [BFF Skills Competition](project_bff_skills.md) — $100/day, WRITE skills, two-stage PR flow with Devin+Gemini review
