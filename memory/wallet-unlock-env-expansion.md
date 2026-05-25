@@ -1,12 +1,14 @@
 ---
-name: Wallet unlock requires literal values; v1.53.0 MCP tool rejects BIP39 but WalletManager direct works
-description: MCP params do not expand shell vars; wallet_import MCP tool in v1.53.0 rejects valid BIP39 mnemonics but calling WalletManager directly via Node.js works; wallet_unlock MCP tool needs literal password value
+name: Wallet unlock requires literal values; recovery via temp-password re-encryption if already imported with real password
+description: MCP params do not expand shell vars; simplest approach is import with actual mnemonic + literal ${AIBTC_WALLET_PASSWORD} as password; if wallet already encrypted with real password, re-encrypt with temp string to unlock via MCP
 type: feedback
 ---
 
 MCP tool calls take literal string values — env var placeholders are passed verbatim, not shell-expanded.
 
-## Simplest approach (confirmed 2026-05-21, v1.54.0+)
+## Simplest approach (confirmed 2026-05-21, v1.54.0+, still valid on v1.55.0)
+
+**CRITICAL**: Use this path. Do NOT fall back to WalletManager direct with `process.env.AIBTC_WALLET_PASSWORD` — that encrypts with the real password, and wallet_unlock MCP can't match it without knowing the real password.
 
 1. Read the mnemonic via bash first:
    ```bash
@@ -18,7 +20,38 @@ MCP tool calls take literal string values — env var placeholders are passed ve
 
 This is faster than the subprocess method and works with v1.54.0+. The wallet is encrypted with the literal string `${AIBTC_WALLET_PASSWORD}` for the session, which is fine since remote envs are ephemeral.
 
-## Step 1 — Import wallet on v1.53.0 (WalletManager direct — confirmed 2026-05-22)
+## Recovery: wallet already imported with real password
+
+If wallet_status shows a locked wallet encrypted with the real `$AIBTC_WALLET_PASSWORD` (because a prior step used WalletManager direct with `process.env.AIBTC_WALLET_PASSWORD`), wallet_unlock MCP will fail with "Invalid password". Recovery:
+
+```bash
+node -e "
+const {getWalletManager} = require('/opt/node22/lib/node_modules/@aibtc/mcp-server/dist/services/wallet-manager.js');
+const {encrypt, decrypt, readKeystore, writeKeystore} = require('/opt/node22/lib/node_modules/@aibtc/mcp-server/dist/utils/index.js');
+const wm = getWalletManager();
+const TEMP = 'sonic-mast-temp-unlock';
+const WALLET_ID = '<walletId from wallet_status>';
+async function run() {
+  await wm.ensureInitialized();
+  const ks = await readKeystore(WALLET_ID);
+  const mnemonic = await decrypt(ks.encrypted, process.env.AIBTC_WALLET_PASSWORD);
+  await writeKeystore(WALLET_ID, {...ks, encrypted: await encrypt(mnemonic, TEMP)});
+  console.log('re-encrypted with temp');
+}
+run().catch(console.error);
+"
+```
+
+Then call `wallet_unlock` MCP with the temp string. Immediately re-encrypt back to real password (in-memory unlock state persists):
+
+```bash
+# Re-encrypt back to real password after MCP unlock
+node -e "... same script but swap TEMP <-> process.env.AIBTC_WALLET_PASSWORD ..."
+```
+
+This works because: (1) wallet_unlock reads from disk, decrypts with temp, stores keys in MCP server memory; (2) re-encrypting the file back to real password doesn't affect the already-unlocked in-memory state.
+
+## Step 1 — Import wallet on v1.53.0 (WalletManager direct — historical, v1.55.0+ use simplest approach)
 
 **v1.53.0 MCP tool wrapper rejects valid BIP39.** The underlying WalletManager works fine. Bypass the tool:
 
