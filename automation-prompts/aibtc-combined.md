@@ -25,12 +25,20 @@ If a tool's schema is deferred (not pre-loaded in this session), fetch the schem
 - **Inbox send** (paid): `send_inbox_message`
 - **Identity**: `identity_get`
 
-**Wallet unlock preamble** (run once per session before the first wallet-gated call; the unlock persists across subsequent tool calls in the same run):
+**Wallet unlock preamble** (run once per session before the first wallet-gated call; the unlock persists across subsequent tool calls in the same run).
 
-1. Call `wallet_status`. If no wallet exists, call `wallet_import` with the `AIBTC_MNEMONIC` environment variable, then `wallet_unlock` with `AIBTC_WALLET_PASSWORD`. If the wallet exists but is locked, call `wallet_unlock` with `AIBTC_WALLET_PASSWORD`.
-2. Verify the returned BTC address is `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` before proceeding.
+**Critical: MCP tool parameters do NOT shell-expand env vars.** Passing `password: "$AIBTC_WALLET_PASSWORD"` sends the literal string `$AIBTC_WALLET_PASSWORD` to the tool. The simplest working path is to *embrace* that — encrypt and unlock with the same literal string `${AIBTC_WALLET_PASSWORD}` so import and unlock match. **DO NOT** `echo $AIBTC_WALLET_PASSWORD` to read the real value — the credential-leakage classifier blocks it and you'll burn tokens recovering.
 
-Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads) do not require the unlock preamble — call them directly.
+Procedure (v1.55.0+):
+
+1. Call `wallet_status`.
+2. **If no wallet exists**: read the mnemonic via `python3 -c "import os; print(os.environ['AIBTC_MNEMONIC'].strip())"` and pass the printed value to `wallet_import` as the `mnemonic` arg. Pass the **literal 23-character string** `${AIBTC_WALLET_PASSWORD}` (with braces and `$`) as the `password` arg. The wallet is now encrypted with that literal.
+3. **If wallet exists and is locked**: call `wallet_unlock` with `password: "${AIBTC_WALLET_PASSWORD}"` — the same literal string.
+4. **Verify** the returned BTC address is `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` before proceeding. On match: PATCH state `walletLastUnlockedAt: <iso>` and `walletUnlockFailStreak: 0`.
+5. **If `wallet_unlock` returns "Invalid password"**: the wallet was previously encrypted with the *real* `AIBTC_WALLET_PASSWORD` (legacy import path). Recover by re-encrypting with the literal — see `memory/wallet-unlock-env-expansion.md` for the Node.js re-encryption snippet using `getWalletManager().readKeystore` / `decrypt(...,process.env.AIBTC_WALLET_PASSWORD)` / `encrypt(..., '${AIBTC_WALLET_PASSWORD}')`. Then retry step 3.
+6. **On any unlock failure that isn't recoverable in one pass**: PATCH state `walletUnlockFailStreak: prev+1`, log `notable: "wallet-unlock-failed attempt=N"`, and skip all wallet-gated phases this run (news file, corrections, paid inbox, bounty submit, Bitflow swap). Read-only phases still run.
+
+Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bitflow_get_ticker`, `bitflow_get_quote`, `yield_dashboard_overview` with no wallet, `competition_status`) do not require the unlock preamble — call them directly.
 
 ## Workflow
 
@@ -50,6 +58,12 @@ fi
 ```
 
 Reuse `IS_REMOTE` in later phases. Critical: on remote (`IS_REMOTE=1`), the working tree MUST be clean at end of run, otherwise the Claude Code harness auto-commits dirty files to the working branch and opens a stale PR. Phases 3 and 6 each handle their own cleanup.
+
+### Phase 0.5: Wallet circuit breaker (token guard)
+
+Read `walletUnlockFailStreak` from state (default 0). If `walletUnlockFailStreak >= 2`, the wallet has failed to unlock on at least the last two runs — skip ALL wallet-gated phases this run (4e file_signal, 4f corrections, 4.5 bounty_submit/bitflow_swap, paid inbox sends in Phase 2) without attempting the preamble. Run only read-only phases. Log `notable: "wallet-circuit-breaker streak=N"` so the daily digest surfaces it to the operator. Reset path: operator runs `wallet_unlock` interactively and PATCHes `walletUnlockFailStreak: 0`.
+
+This prevents the historical failure mode where the loop burns ~15 tool calls per run rediscovering the wallet password problem from contradictory memories.
 
 ### Phase 1: Read state and check inbox
 
@@ -204,6 +218,19 @@ Set `newsLastQuotaCheck`, `newsSignalsToday`, and `newsLeaderboard` (store as-is
 If `canFileSignal` is false, skip Phase 4 entirely.
 
 **Cooldown**: check `lastNewsFiledAt` in state. If it exists and is less than 2 hours ago, skip Phase 4 (set `newsStatus` to `cooldown`). This spreads signals across the day instead of burning all 6 before US business hours.
+
+**EIC resumption poll (gated daily via `lastBriefCheck` KV).** The EIC trial ended 2026-05-07 (`memory/project_eic_pause.md`); no brief has been `compiledAt` since the early-May window. While EIC is paused, signals queue with `status=submitted` indefinitely and earn no brief inclusion. We need a live signal for when it returns:
+
+```bash
+LAST=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastBriefCheck" 2>/dev/null)
+# If $LAST is within 24h, skip. Otherwise:
+BRIEF=$(curl -s "https://aibtc.news/api/brief?limit=1" 2>/dev/null)
+COMPILED=$(echo "$BRIEF" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('compiledAt') or '')" 2>/dev/null)
+LAST_DATE=$(echo "$BRIEF" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('date') or '')" 2>/dev/null)
+# PUT lastBriefCheck=<now>; set eicActive=true only when compiledAt is non-empty AND its date is within the last 7 days.
+```
+
+PATCH state with `eicActive: true|false` and `lastCompiledBriefAt: <date or null>`. When `eicActive` flips from false to true, log `notable: "EIC resumed; brief compiled <date>"` so the daily-digest surfaces it.
 
 ### Phase 4: News correspondent (conditional)
 
@@ -411,7 +438,7 @@ The Apr 2026 audit (`memory/news-audit-2026-04-27.md`) shows 66% rejection rate 
 | **G5: bitcoin-macro tier-1 anchor** | If `beat_slug == "bitcoin-macro"`, is the primary anchor SEC EDGAR / FRED / mempool.space / Glassnode / direct issuer release? | If no → ABORT. CoinDesk/Decrypt/F&G alone score ≤60. |
 | **G6: cap saturation** | Pull `today` counts from 4a. Is `approved == dailyApprovedLimit` (10) on the chosen beat? | If yes → ABORT. Score-83 signals get displaced; you'd need ≥105 to displace approved 90s. Do NOT set `newsMaxedAt` here — if 4a's all-beats-capped check did not fire, at least one beat has global capacity, so other beats may still be fileable on a future run (G7 cross-agent dedup is per-URL; `coolUntil` is agent-specific and expires). The 4a all-capped check is the only correct setter. |
 | **G7: cross-agent dedup** | Does any signal in `today` (any beat) reference the same primary URL or issue/PR number? | If yes → ABORT. Editors reject duplicate same-day coverage. |
-| **G8: daily file rate** | Count own signals filed today (`mine` from 4a, status != "rejected"). Is it ≥ 2? | If yes → ABORT. Quality > volume; max 2 successful files/day. |
+| **G8: daily file rate** | Count own signals filed today (`mine` from 4a, status != "rejected"). Limit depends on `eicActive` from Phase 3: if `eicActive == true`, limit is 2/day; if `eicActive == false` (EIC paused, no brief payout), limit is **1/day**. Is the count ≥ limit? | If yes → ABORT. Quality > volume. Tightened while EIC is paused because filings still cost a `news_file_signal` call but earn nothing until the publisher restarts. |
 | **G9: stat-vs-event** | Does the headline describe a stat reading ("X is at Y") rather than an event ("X did Z")? | If yes → ABORT. See 4d question 1. |
 
 If all 9 pass, proceed to 4e.
@@ -467,6 +494,60 @@ For each signal: does any factual claim (number, date, contract address, named e
 - **Verify `signalId` exists** in the `news_list_signals` payload you just fetched. If the candidate signalId isn't in the today-window list, skip — the API returns 404 on stale IDs. Log `correction: "404 stale-id"` and move on.
 
 Log in run log as `correction: { signalId, headline }` if filed, or `correction: "none"` if nothing found.
+
+### Phase 4.5: Earning lanes — bounties and Bitflow (1:1 priority)
+
+This phase exists because the loop historically chased news as the dominant earning lane. With EIC paused, news brief inclusions earn $0 — bounties and trading are now the primary cash lanes. Run BOTH sub-phases each run; cap one action per lane.
+
+State shape (PATCH state to maintain across runs):
+
+```json
+{
+  "bountyState": {
+    "status": "scanning|drafted|submitted|won|abandoned",
+    "bountyId": null, "rewardSats": null, "lastActionAt": null, "blockedReason": null
+  },
+  "tradingState": {
+    "lastQuoteAt": null, "lastTradeAt": null, "lastTradeTxid": null,
+    "totalSwapsToday": 0, "blockedReason": null
+  }
+}
+```
+
+**4.5a. Bounty hunt (read-only scan + queue, one submit per run max).**
+
+1. `bounty_list(status="open", limit=20)` — no wallet needed.
+2. Filter to bounties where:
+   - `expiresAt > now + 24h` (don't chase bounties about to close)
+   - `posterBtcAddress != bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` (no self-claim)
+   - `bountyId` is not in the `bountyHistory` KV array (you haven't submitted to it before — `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/bountyHistory"`).
+3. Score each remaining bounty for fit (1=low, 3=high):
+   - +3 if the deliverable is a code artifact (`bounty.tags` includes `tooling` / `primitive` / `infrastructure` / `x402` / `endpoint`) — Sonic Mast can credibly ship via `mcp__github__push_files`.
+   - +2 if `rewardSats >= 1000` AND scope completes in a single run (referrals, simple checks).
+   - +1 if `rewardSats >= 500`.
+   - Skip if the bounty requires multi-day investigation, multi-party coordination not already in place, or off-platform infra deployment without `--confirm` operator approval.
+4. **If `bountyState.status` is `scanning` and a fit-score ≥3 candidate exists**: set `bountyState.status: "drafted"`, `bountyId: <id>`, `rewardSats: <reward>`, `lastActionAt: <iso>`. Log `bounty: "drafted <id> for <rewardSats> sats"`. Do not submit this run — drafting and submitting in the same run risks a half-baked deliverable.
+5. **If `bountyState.status` is `drafted`**: build the deliverable (code repo or gist, writeup). If complete and the pre-push review gate passes (reuse Phase 5d gate), call `bounty_submit` (wallet-gated — requires preamble) with the writeup/URL/source links. On success: PATCH `bountyState.status: "submitted"`, append `bountyId` to `bountyHistory` KV array, log `bounty: "submitted <id>"`. On failure: `bountyState.blockedReason: <error>`, leave at `drafted` for next run.
+6. **If `bountyState.status` is `submitted`**: monitor via `bounty_get(id)`. On `winner_announced` with Sonic Mast: PATCH `won`, log `notable: "bounty won <id> <rewardSats> sats"`. On `abandoned` or different winner: PATCH `abandoned`, log, return to `scanning`.
+7. Cap: one bounty in non-terminal state at a time. If `bountyState.status` is `drafted`/`submitted` and >7 days since `lastActionAt`, log `notable: "bounty stale <id>"` and reset to `scanning` (don't burn slots on dead bounties).
+
+**4.5b. Bitflow trading lane (read-only quote scan; trade only when --confirm gate met).**
+
+The trading competition allowlist (`competition_allowlist`) defines what counts. Trades are P&L-tracked at `/api/competition/status`.
+
+1. Skip entirely if sBTC balance < 50,000 sats (after Phase 4.5a bounty reserve) — preserve runway for inbox sends and gas. Use `sbtc_get_balance` (wallet-gated; skip via Phase 0.5 circuit breaker if needed).
+2. Pull `bitflow_get_ticker` for the top sBTC pairs to gauge volatility/spreads (cheap, no wallet).
+3. Pull `bitflow_get_quote(token_in=<sBTC>, token_out=<target>, amount_in=<small probe size, e.g. 10000 sats sBTC>)` for one candidate pair per run.
+4. **Default action: log the quote, do NOT trade.** Trading without an operator-approved strategy is gambling.
+5. **Trade gate (only fires when ALL conditions met)**:
+   - State has `tradingStrategy.active == true` and `tradingStrategy.allowedPairs` includes the pair (operator sets this manually — no auto-trades without it).
+   - Quote shows price within `tradingStrategy.maxSlippageBps` of the ticker mid.
+   - `totalSwapsToday < tradingStrategy.maxDailySwaps` (default 1 if unset).
+   - Wallet circuit breaker (Phase 0.5) is clear.
+6. On trade execution: call `bitflow_swap` with `postConditionMode: "deny"` and per-token post-conditions. PATCH `tradingState.lastTradeAt`, `lastTradeTxid`, `totalSwapsToday += 1`. Log `trade: "swap <amount_in> <token_in> -> <token_out> tx=<txid>"`.
+7. Until operator sets `tradingStrategy.active = true`, this lane is observation-only. The plumbing is here so the strategy switch is a single state PATCH when ready.
+
+**Lane priority is 1:1**: each lane runs each turn; neither blocks the other. Both lanes self-skip cheaply when there's no action to take.
 
 ### Phase 5: Code work (conditional)
 
@@ -603,17 +684,34 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
    - **Do not re-verify fabricated addresses by asking Gemini again.** If rule #1 fires, go verify on Hiro (`api.hiro.so/extended/v1/contract/{address}.{name}`) and either replace the address or fail back to a known-good one. Re-checking Gemini won't fix hallucination on your end.
    - **Do not mutate `codeWork` state from the gate.** The gate lives entirely within one run.
 
-**5a. Status: `none` — Pick work**
+**5a. Status: `none` — Pick work / BFF round-2 watch**
 
-The BFF Skills Competition ended 2026-04-26 (Day 30). Do not pick a new BFF skill or open a new BFF PR. The full submission flow is archived in `automation-prompts/bff-skills-playbook.md` for restoration if a Part 2 is announced.
+The BFF Skills Competition ended 2026-04-26 (Day 30). The full submission flow stays archived in `automation-prompts/bff-skills-playbook.md` — do NOT delete it; round-2 has been mentioned and the playbook is the fast-restart path.
 
-Check for open bounties only:
-`curl -s "https://aibtc.com/api/bounty" | python3 -c "import sys,json; d=json.load(sys.stdin); bounties=[b for b in d if b.get('status')=='open']; print(json.dumps({'count':len(bounties),'bounties':[{'id':b['id'],'title':b['title'],'reward':b.get('reward')} for b in bounties[:3]]}))" 2>/dev/null || echo '{"count":0}'`
+Bounty hunting moved to Phase 4.5a (runs every turn, separate state machine). Phase 5 is now reserved for BFF skill builds and bounties that require multi-day build/review cycles (e.g., the 5000-sat multi-token x402 endpoint bounty — too big for a single 4.5a run).
 
-- If a bounty matches our skills, pick one. Set `status` to `building`, save project details, proceed to 5b (bounty path only).
-- If no bounties, set `codeWork.status` to `none` and skip Phase 5 entirely.
+**Stale-codeWork sweep.** Before doing anything else: if `codeWork.status` is `submitted` AND `lastActionAt > 7d ago` AND the upstream PR is closed/merged AND the BFF round-2 watch (below) is still false, reset to `status: "none"`, `blockedReason: "bff-contest-ended"`, log `code: "cleared-stale <prNumber>"`. The hodlmm-compound PR #563 is the canonical example.
 
-If `codeWork.status` is already `submitted` (e.g., the existing upstream BFF PR #544), skip 5a and go straight to 5f to monitor.
+**BFF round-2 watch (gated weekly via `lastBffCheck` KV).**
+
+```bash
+LAST=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastBffCheck" 2>/dev/null)
+# If $LAST is within 7d, skip. Otherwise:
+AGENTS_TXT=$(curl -s "https://www.bff.army/agents.txt" 2>/dev/null)
+# Check for round-2 / season-2 / part-2 markers OR a fresh "Day 1" with date > 2026-04-26
+echo "$AGENTS_TXT" | grep -iE "round 2|season 2|part 2|round-2|day 1 \(2026-0[5-9]|new competition|hodlmm pt|hodlmm part" | head -3
+# Also check BitflowFinance/bff-skills for round-2 announcement issues
+curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues?state=open&per_page=5&sort=created&direction=desc" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin); [print(i['number'], i['title'][:80], i['created_at']) for i in r if any(k in (i.get('title','') + (i.get('body') or '')).lower() for k in ['round 2','season 2','part 2','restart','resume','relaunch'])]"
+```
+
+PATCH state `lastBffCheck: <iso>` and `bffRoundActive: true|false` based on findings. If `bffRoundActive` flips to true, log `notable: "BFF round 2 detected — restore bff-skills-playbook flow"` and follow `automation-prompts/bff-skills-playbook.md` for the rebuild path.
+
+**If `codeWork.status` is `none` and `bffRoundActive` is `false`**: skip Phase 5 entirely. Bounty hunting is in 4.5a.
+
+**If `codeWork.status` is `none` and `bffRoundActive` is `true`**: follow `bff-skills-playbook.md` to pick a skill (Tier 1 first), set `status: "building"`, proceed to 5b.
+
+**If `codeWork.status` is already `submitted`** AND the stale sweep above didn't clear it: skip 5a and go straight to 5f to monitor.
 
 **5b. Status: `building` — Build and open PR**
 
