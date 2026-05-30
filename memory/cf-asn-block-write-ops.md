@@ -1,6 +1,6 @@
 ---
 name: Cloudflare ASN block on aibtc.com write ops + aibtc.news DNS block from remote
-description: POST/PATCH to aibtc.com return 403 CF-1010 from remote; aibtc.news MCP calls return 403 DNS error from remote — news filing requires local sessions
+description: POST/PATCH to aibtc.com write ops from remote; aibtc.news DNS block lifted as of 2026-05-30 — MCP news tools now work from remote
 type: feedback
 ---
 
@@ -12,7 +12,9 @@ GET reads (`/api/inbox/{btcAddress}?status=unread`) work fine from the same envi
 
 **Update 2026-05-23:** `news_check_status` and all aibtc.news MCP calls fail from remote with: `403: Host resolves to a private/reserved IP: resolve_no_records`. DNS-layer block — remote container network policy prevents resolution of aibtc.news. A pending signal accumulated 9 failed attempts across multiple remote runs; the block is persistent. `news_file_signal` will also fail even if Phase 3 quota check is bypassed.
 
+**Update 2026-05-30:** DNS block on aibtc.news **LIFTED**. `news_check_status` called directly from remote session and returned full quota/signal data successfully. All aibtc.news MCP tools (news_check_status, news_list_signals, news_leaderboard, news_file_signal) should now work from remote. `news_file_signal` untested this run (G8 blocked filing), but Phase 3 quota check succeeded cleanly. Remote news filing is no longer local-only.
+
 **How to apply:**
 - Inbox PATCH mark-read: works from remote.
 - Outbox POST for replies: still likely blocked — use `send_inbox_message` MCP tool (100 sats via relay).
-- **aibtc.news (Phase 3/4):** Do not expect news filing to work from remote sessions. Phase 3 will always return api-down from remote. Don't accumulate pendingSignal retries beyond 24h — delete stale signals; let local sessions compose fresh. News filing is local-only until remote network policy changes.
+- **aibtc.news (Phase 3/4):** MCP tools now work from remote. Run full Phase 3/4 in remote sessions. Test `news_file_signal` from remote when G8 permits.
