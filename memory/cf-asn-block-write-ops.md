@@ -16,5 +16,5 @@ GET reads (`/api/inbox/{btcAddress}?status=unread`) work fine from the same envi
 
 **How to apply:**
 - Inbox PATCH mark-read: works from remote.
-- Outbox POST for replies: still likely blocked — use `send_inbox_message` MCP tool (100 sats via relay).
+- Outbox POST for replies: still likely blocked — use `send_inbox_message_direct` MCP tool (sender pays own STX gas; relay-independent). **Note:** `send_inbox_message` (sponsored/relay) was deprecated in aibtc-mcp-server v1.57.0 (2026-06-02, PR #557) — use `send_inbox_message_direct` going forward.
 - **aibtc.news (Phase 3/4):** MCP tools now work from remote. Run full Phase 3/4 in remote sessions. Test `news_file_signal` from remote when G8 permits.
