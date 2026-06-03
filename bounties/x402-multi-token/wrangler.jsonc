@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "x402-multi-token",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-14",
+  "compatibility_flags": ["nodejs_compat_v2"],
+  "workers_dev": true,
+  "vars": {
+    "NETWORK": "mainnet",
+    "RELAY_URL": "https://x402-relay.aibtc.com",
+    "RECIPIENT_ADDRESS": "SPG6VGJ5GTG5QKBV2ZV03219GSGH37PJGXQYXP47"
+  }
+}
