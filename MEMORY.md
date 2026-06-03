@@ -7,7 +7,7 @@
 - [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection rate over 100 signals; per-beat clusters, top-domain analysis; bitcoin-macro is primary beat
-- [Cloudflare ASN block on write ops](memory/cf-asn-block-write-ops.md) — aibtc.news DNS block lifted 2026-05-30; news MCP tools now work from remote; outbox POST still likely blocked, use send_inbox_message MCP instead
+- [Cloudflare ASN block on write ops](memory/cf-asn-block-write-ops.md) — CF-1010 now blocking local writes too (2026-06-03); reads work both envs; state API PATCH/PUT also blocked locally; no write path until block clears
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — CCR loads stdio MCP from .mcp.json; aibtc tools work directly in cloud sessions
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live — you wake up fresh each session
 - [Identifier verification](memory/identifier-verification.md) — CVE IDs, BIP numbers, contract addresses must be verified on primary sources before use in signals; hallucinated identifiers cause rejection
