@@ -23,3 +23,4 @@
 - [News API platform cooldown is ~3h](memory/news-api-cooldown-3h.md) — check_status waitMinutes is unreliable; actual POST cooldown ~3h; extend self-imposed check to 3.5h; corrections bypass cooldown
 - [news_file_signal 202 status](memory/news-file-signal-202.md) — tool throws on HTTP 202 but signal IS staged; error body contains signalId — treat as pending-success, not failure; do not cache as pendingSignal
 - [Identity service extended outage](memory/identity-service-extended-outage.md) — IDENTITY_SERVICE_UNAVAILABLE 503 persists days (not hours); increment pendingSignal attempts and skip
+- [Bitflow ticker endpoint is empty](memory/bitflow-ticker-empty.md) — bitflow_get_ticker returns 0 pairs upstream (not a trading outage); use get_swap_targets/get_quote with tokenX/tokenY/amountIn/amountUnit
