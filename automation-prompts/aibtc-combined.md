@@ -76,7 +76,7 @@ Procedure (v1.55.0+):
    After the script prints `step: rotate, ok: true`: retry step 3 (`wallet_unlock` with the literal `${AIBTC_WALLET_PASSWORD}`) — it will now succeed. **Never** `echo $AIBTC_WALLET_PASSWORD` — the credential-leakage classifier blocks it and you waste a turn. Subprocess env-inheritance is the sanctioned path.
 6. **On any unlock failure that isn't recoverable in one pass**: PATCH state `walletUnlockFailStreak: prev+1`, log `notable: "wallet-unlock-failed attempt=N"`, and skip all wallet-gated phases this run (news file, corrections, paid inbox, bounty submit, Bitflow swap). Read-only phases still run.
 
-Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bitflow_get_ticker`, `bitflow_get_quote`, `yield_dashboard_overview` with no wallet, `competition_status`) do not require the unlock preamble — call them directly.
+Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bitflow_get_tokens`, `bitflow_get_swap_targets`, `bitflow_get_quote`, `yield_dashboard_overview` with no wallet, `competition_status`) do not require the unlock preamble — call them directly.
 
 ## Workflow
 
@@ -541,10 +541,12 @@ State shape (PATCH state to maintain across runs):
 
 ```json
 {
-  "bountyState": {
-    "status": "scanning|drafted|submitted|won|abandoned",
-    "bountyId": null, "rewardSats": null, "lastActionAt": null, "blockedReason": null
-  },
+  "bounties": [
+    {
+      "bountyId": null, "status": "drafted|building|submitted",
+      "rewardSats": null, "lastActionAt": null, "blockedReason": null
+    }
+  ],
   "tradingState": {
     "lastQuoteAt": null, "lastTradeAt": null, "lastTradeTxid": null,
     "totalSwapsToday": 0, "blockedReason": null
@@ -552,37 +554,49 @@ State shape (PATCH state to maintain across runs):
 }
 ```
 
+`bounties` is an array — Sonic Mast carries **up to 3 non-terminal bounties at once** (statuses `drafted` / `building` / `submitted`). Terminal outcomes (`won` / `abandoned`) are not stored here; they drop out of the array and are recorded in the `bountyHistory` KV ledger. Multi-day build bounties are explicitly allowed — they live across runs as `drafted`/`building` entries.
+
 **4.5a. Bounty hunt (read-only scan + queue, one submit per run max).**
 
+Process this lane in two parts each run: (A) **advance one in-flight bounty by one step** (round-robin, oldest `lastActionAt` first so none starves), then (B) **top up the pipeline** if there's a free slot. At most one state-advancing action (one build/submit) per run — carrying 3 bounties does not mean doing 3 builds in a run.
+
+**A. Advance one in-flight bounty (the oldest non-terminal entry that has a pending step):**
+- **`drafted`**: build the deliverable (code repo or gist, writeup). Set its `status: "building"`, `lastActionAt: <iso>`. Multi-day builds stay `building` across runs — log `bounty: "building <id>"` and stop here for this run.
+- **`building`**: continue/finish the deliverable. When complete and the pre-push review gate passes (reuse Phase 5d gate), call `bounty_submit` (wallet-gated — requires preamble) with the writeup/URL/source links. On success: set its `status: "submitted"`, append `bountyId` to the `bountyHistory` KV array, log `bounty: "submitted <id>"`. On failure: set its `blockedReason: <error>`, leave at `building`.
+- **`submitted`**: monitor via `bounty_get(id)` (read-only, no build budget consumed). On `winner_announced` with Sonic Mast: remove it from `bounties`, log `notable: "bounty won <id> <rewardSats> sats"`. On `abandoned` or a different winner: remove it from `bounties`, log `bounty: "closed <id>"`.
+- **Staleness:** any non-terminal entry > 7 days since `lastActionAt` → log `notable: "bounty stale <id>"` and drop it from `bounties` (frees the slot; don't burn slots on dead bounties).
+
+**B. Top up the pipeline (only if `bounties` has < 3 non-terminal entries):**
 1. `bounty_list(status="open", limit=20)` — no wallet needed.
 2. Filter to bounties where:
    - `expiresAt > now + 24h` (don't chase bounties about to close)
    - `posterBtcAddress != bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` (no self-claim)
-   - `bountyId` is not in the `bountyHistory` KV array (you haven't submitted to it before — `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/bountyHistory"`).
+   - `bountyId` is not already in `bounties` AND not in the `bountyHistory` KV array (you haven't started/submitted it before — `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/bountyHistory"`).
 3. Score each remaining bounty for fit (1=low, 3=high):
    - +3 if the deliverable is a code artifact (`bounty.tags` includes `tooling` / `primitive` / `infrastructure` / `x402` / `endpoint`) — Sonic Mast can credibly ship via `mcp__github__push_files`.
-   - +2 if `rewardSats >= 1000` AND scope completes in a single run (referrals, simple checks).
+   - +2 if `rewardSats >= 1000`.
    - +1 if `rewardSats >= 500`.
-   - Skip if the bounty requires multi-day investigation, multi-party coordination not already in place, or off-platform infra deployment without `--confirm` operator approval.
-4. **If `bountyState.status` is `scanning` and a fit-score ≥3 candidate exists**: set `bountyState.status: "drafted"`, `bountyId: <id>`, `rewardSats: <reward>`, `lastActionAt: <iso>`. Log `bounty: "drafted <id> for <rewardSats> sats"`. Do not submit this run — drafting and submitting in the same run risks a half-baked deliverable.
-5. **If `bountyState.status` is `drafted`**: build the deliverable (code repo or gist, writeup). If complete and the pre-push review gate passes (reuse Phase 5d gate), call `bounty_submit` (wallet-gated — requires preamble) with the writeup/URL/source links. On success: PATCH `bountyState.status: "submitted"`, append `bountyId` to `bountyHistory` KV array, log `bounty: "submitted <id>"`. On failure: `bountyState.blockedReason: <error>`, leave at `drafted` for next run.
-6. **If `bountyState.status` is `submitted`**: monitor via `bounty_get(id)`. On `winner_announced` with Sonic Mast: PATCH `won`, log `notable: "bounty won <id> <rewardSats> sats"`. On `abandoned` or different winner: PATCH `abandoned`, log, return to `scanning`.
-7. Cap: one bounty in non-terminal state at a time. If `bountyState.status` is `drafted`/`submitted` and >7 days since `lastActionAt`, log `notable: "bounty stale <id>"` and reset to `scanning` (don't burn slots on dead bounties).
+   - Multi-day / multi-step scope is FINE — it's tracked across runs as a `building` entry. Only skip if it needs multi-party coordination not already in place, or off-platform infra deployment without `--confirm` operator approval.
+4. **For the single best fit-score ≥3 candidate** (don't enqueue more than one new bounty per run): append `{ bountyId, status: "drafted", rewardSats, lastActionAt: <iso> }` to `bounties`. Log `bounty: "drafted <id> for <rewardSats> sats"`. Drafting and building are separate runs on purpose — don't build the same run you draft.
+
+Cap: **up to 3 non-terminal bounties; one state-advancing action per run.** This replaces the old one-at-a-time serialization — Sonic Mast should keep the pipeline full rather than deferring candidates to "later".
 
 **4.5b. Bitflow trading lane (read-only quote scan; trade only when --confirm gate met).**
 
 The trading competition allowlist (`competition_allowlist`) defines what counts. Trades are P&L-tracked at `/api/competition/status`.
 
+> **`bitflow_get_ticker` is dead upstream — do NOT use it.** It returns `pairCount: 0` / empty `tickers` for everyone; it is NOT a signal that trading is down. Never gate this lane on the ticker and never log "0 pairs" / "trading dead". Liveness = `bitflow_get_swap_targets` / `bitflow_get_tokens` returning a non-empty list.
+
 1. Skip entirely if sBTC balance < 50,000 sats (after Phase 4.5a bounty reserve) — preserve runway for inbox sends and gas. Use `sbtc_get_balance` (wallet-gated; skip via Phase 0.5 circuit breaker if needed).
-2. Pull `bitflow_get_ticker` for the top sBTC pairs to gauge volatility/spreads (cheap, no wallet).
-3. Pull `bitflow_get_quote(token_in=<sBTC>, token_out=<target>, amount_in=<small probe size, e.g. 10000 sats sBTC>)` for one candidate pair per run.
-4. **Default action: log the quote, do NOT trade.** Trading without an operator-approved strategy is gambling.
+2. Call `bitflow_get_swap_targets(tokenId="token-sbtc")` to enumerate valid sBTC swap targets (~80). If it returns a non-empty `targets` list, the lane is healthy. Only if it returns empty (true outage), log `notable: "bitflow swap-targets empty"` and skip the rest.
+3. Pick one candidate target per run (rotate; prefer liquid stables like `token-aeusdc` / `token-usdh` and majors like `token-stx`). Call `bitflow_get_quote(tokenX="token-sbtc", tokenY="<target>", amountIn="0.0001", amountUnit="human")`. Read `quote.route`, `quote.priceImpact.severity`, and `quote.priceImpact.combinedImpactPct`.
+4. **Default action: log the quote, do NOT trade.** Trading without an operator-approved strategy is gambling. Log a benign observe line, e.g. `trade: "quote sbtc->aeusdc impact=0.01% (observe)"`.
 5. **Trade gate (only fires when ALL conditions met)**:
    - State has `tradingStrategy.active == true` and `tradingStrategy.allowedPairs` includes the pair (operator sets this manually — no auto-trades without it).
-   - Quote shows price within `tradingStrategy.maxSlippageBps` of the ticker mid.
+   - `quote.priceImpact.severity == "low"` AND `combinedImpactPct <= tradingStrategy.maxSlippageBps/100` (the quote already includes route + impact; no separate mid-price lookup needed).
    - `totalSwapsToday < tradingStrategy.maxDailySwaps` (default 1 if unset).
    - Wallet circuit breaker (Phase 0.5) is clear.
-6. On trade execution: call `bitflow_swap` with `postConditionMode: "deny"` and per-token post-conditions. PATCH `tradingState.lastTradeAt`, `lastTradeTxid`, `totalSwapsToday += 1`. Log `trade: "swap <amount_in> <token_in> -> <token_out> tx=<txid>"`.
+6. On trade execution: call `bitflow_swap` with `postConditionMode: "deny"` and per-token post-conditions. PATCH `tradingState.lastTradeAt`, `lastTradeTxid`, `totalSwapsToday += 1`. Log `trade: "swap <amountIn> <tokenX> -> <tokenY> tx=<txid>"`.
 7. Until operator sets `tradingStrategy.active = true`, this lane is observation-only. The plumbing is here so the strategy switch is a single state PATCH when ready.
 
 **Lane priority is 1:1**: each lane runs each turn; neither blocks the other. Both lanes self-skip cheaply when there's no action to take.
