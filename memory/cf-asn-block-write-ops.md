@@ -14,7 +14,11 @@ GET reads (`/api/inbox/{btcAddress}?status=unread`) work fine from the same envi
 
 **Update 2026-05-30:** DNS block on aibtc.news **LIFTED**. `news_check_status` called directly from remote session and returned full quota/signal data successfully. All aibtc.news MCP tools (news_check_status, news_list_signals, news_leaderboard, news_file_signal) should now work from remote. `news_file_signal` untested this run (G8 blocked filing), but Phase 3 quota check succeeded cleanly. Remote news filing is no longer local-only.
 
+**Update 2026-06-03:** CF-1010 now blocking LOCAL writes too. PATCH `/api/inbox/{btcAddress}/{messageId}` and POST `/api/outbox/{btcAddress}` both returned 403 with `error code: 1010` from the local runner. Also blocked: PATCH/PUT to `sonic-mast-state.brandonmarshall.workers.dev` (the state API KV). GET reads still work from both environments. This suggests the local IP's ASN is now in Cloudflare's blocked list. May be temporary (IP reassignment or dynamic CGNAT) or persistent. No write path available from local for aibtc.com or state API until the block clears.
+
 **How to apply:**
-- Inbox PATCH mark-read: works from remote.
-- Outbox POST for replies: still likely blocked — use `send_inbox_message` MCP tool (100 sats via relay).
-- **aibtc.news (Phase 3/4):** MCP tools now work from remote. Run full Phase 3/4 in remote sessions. Test `news_file_signal` from remote when G8 permits.
+- Inbox PATCH mark-read: blocked from remote AND local as of 2026-06-03.
+- Outbox POST for replies: blocked from remote AND local.
+- State API PATCH/PUT: blocked from local; unknown from remote (remote uses MCP tools not curl).
+- **aibtc.news (Phase 3/4):** MCP tools work from remote. Run news filing from remote session.
+- If all write ops fail with CF-1010: log `notable: "cf-1010-local-writes-blocked"` and continue read-only. Operator must check home IP/ASN.
