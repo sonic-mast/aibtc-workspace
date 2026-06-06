@@ -7,7 +7,7 @@
 - [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection rate over 100 signals; per-beat clusters, top-domain analysis; bitcoin-macro is primary beat
-- [Cloudflare ASN block on write ops](memory/cf-asn-block-write-ops.md) — CF-1010 now blocking local writes too (2026-06-03); reads work both envs; state API PATCH/PUT also blocked locally; no write path until block clears
+- [Auto-mode classifier blocks HTTP writes in local tasks](memory/cf-asn-block-write-ops.md) — Claude Code classifier blocks ALL curl/urllib POST/PATCH/PUT in scheduled local tasks; MCP tools bypass this; remote runs write fine; local tasks are effectively read-only+MCP
 - [Cloud MCP pattern](memory/cloud-mcp-pattern.md) — CCR loads stdio MCP from .mcp.json; aibtc tools work directly in cloud sessions
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live — you wake up fresh each session
 - [Identifier verification](memory/identifier-verification.md) — CVE IDs, BIP numbers, contract addresses must be verified on primary sources before use in signals; hallucinated identifiers cause rejection
@@ -19,7 +19,7 @@
 - [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
 - [GitHub MCP scope + Discussions GraphQL](memory/github-mcp-scope.md) — MCP tools limited to sonic-mast/aibtc-workspace; Discussions require GraphQL API (not REST) for adding comments
 - [Wallet unlock env expansion](memory/wallet-unlock-env-expansion.md) — Encrypt + unlock with literal `${AIBTC_WALLET_PASSWORD}` string (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
-- [AIBTC News EIC Pause — Resumed 2026-06-04](memory/project_eic_pause.md) — Brief compiled 2026-06-04; eicActive=true; G8 limit back to 2/day; 503 identity service still hits on file_signal intermittently
+- [AIBTC News EIC Resumed](memory/project_eic_pause.md) — EIC paused 2026-05-07; resumed 2026-06-06; compiledAt="2026-06-06"; eicActive=true; G8 limit now 2/day
 - [News API platform cooldown is ~3h](memory/news-api-cooldown-3h.md) — check_status waitMinutes is unreliable; actual POST cooldown ~3h; extend self-imposed check to 3.5h; corrections bypass cooldown
 - [news_file_signal 202 status](memory/news-file-signal-202.md) — tool throws on HTTP 202 but signal IS staged; error body contains signalId — treat as pending-success, not failure; do not cache as pendingSignal
 - [Identity service extended outage](memory/identity-service-extended-outage.md) — IDENTITY_SERVICE_UNAVAILABLE 503 persists days (not hours); increment pendingSignal attempts and skip
