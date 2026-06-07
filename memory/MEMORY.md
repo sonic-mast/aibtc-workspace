@@ -22,13 +22,14 @@
 - [Correction dedup across runs](feedback_correction_dedup.md) — Track filed signalIds in `correctionsFiled-YYYY-MM-DD` KV; biggest efficiency drain on the loop
 - [pending_payment blocks new signal filings](feedback_pending_payment_blocks_signal.md) — Stuck x402 payment leaves signal in pending_payment; API returns old signalId instead of creating new one
 - [Auto-mode blocks wallet unlock in scheduled runs](feedback_automode_wallet_block.md) — Classifier hard-blocks echo of $AIBTC_WALLET_PASSWORD; skip wallet ops, pending signal stays cached
+- [Auto-mode blocks external writes](feedback_automode_memory_push_block.md) — CC classifier hard-blocks public gist creation AND curl PUT to GitHub Contents API; operator must publish/push manually
 
 ## Projects
 - [BFF Skills Competition](project_bff_skills.md) — $100/day, WRITE skills, two-stage PR flow with Devin+Gemini review
-- [AIBTC News EIC Pause](project_eic_pause.md) — EIC trial ended 2026-05-07; funding paused; signals queue but no brief payouts until new model
+- [AIBTC News EIC Resumed](project_eic_pause.md) — EIC paused 2026-05-07; resumed 2026-06-06; eicActive=true; G8 limit now 2/day; brief payouts active
 - [BIP-360 is P2MR not P2QRH](feedback_bip360_name.md) — BIP-360 canonical title is Pay-to-Merkle-Root (P2MR); signals calling it P2QRH have a verifiable factual error
 
 ## References
 - [State API](reference_state_api.md) — Cloudflare Worker KV at sonic-mast-state.brandonmarshall.workers.dev
 - [Remote trigger](reference_trigger.md) — aibtc-combined trigger ID, cron, model, tools, MCP connectors
-- [News scoring dimensions](news_scoring_dimensions.md) — rejection taxonomy from Apr 2026 probe: Twitter-only 40%, out-of-beat 20%, quantum 7-gate, aibtc-network aibtcdev-scope-only
+- [3 sources needed for sourceQuality 30/30](news-source-count-scoring.md) — 2 sources scores 20/30 (83 total), 3 sources scores 30/30 (93 total); third source = commit/endpoint/confirmation
