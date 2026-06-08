@@ -573,8 +573,8 @@ Process this lane in two parts each run: (A) **advance one in-flight bounty by o
 2. Filter to bounties where:
    - `expiresAt > now + 24h` (don't chase bounties about to close)
    - `posterBtcAddress != bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47` (no self-claim)
-   - `bountyId` is not already in `bounties` (in-flight dedup) AND not in the `bountyHistory` KV array (`bountyHistory` = **confirmed-submitted only**, never "started" — `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/bountyHistory"`).
-   - **Phantom self-heal:** if a `bountyId` in `bountyHistory` is one of ours but `bounty_my_submissions` (read-only) shows no actual submission to it, it's a phantom from a pre-fix run — remove it from `bountyHistory` so it can be re-picked. (Cheap one-time reconcile; only worth doing if a free slot exists and the bounty is still open.)
+   - `bountyId` is not already in `bounties` (in-flight dedup), not in the `bountyHistory` KV array (`bountyHistory` = **confirmed-submitted only**, never "started" — `curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/bountyHistory"`), AND not in the `bountySkip` KV array (bounties the operator deliberately abandoned — `.../kv/bountySkip`; never re-pick these).
+   - **Phantom self-heal:** if a `bountyId` in `bountyHistory` is one of ours but `bounty_my_submissions` (read-only) shows no actual submission to it, it's a phantom from a pre-fix run — remove it from `bountyHistory` so it can be re-picked. **Exception:** if it's in `bountySkip`, leave it alone (deliberately dropped, not a phantom). (Cheap one-time reconcile; only worth doing if a free slot exists and the bounty is still open.)
 3. Score each remaining bounty for fit (1=low, 3=high):
    - +3 if the deliverable is a code artifact (`bounty.tags` includes `tooling` / `primitive` / `infrastructure` / `x402` / `endpoint`) — Sonic Mast can credibly ship via `mcp__github__push_files`.
    - +2 if `rewardSats >= 1000`.
