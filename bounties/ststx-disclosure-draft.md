@@ -4,16 +4,20 @@
 `mpwj216i51b1ad3c6731` until this has been sent and the timestamp/channel are
 recorded below.
 
-**Finding severity:** CRITICAL → the bounty (`mpwj216i51b1ad3c6731`) mandates
-private disclosure to **both** the pool deployer and the StackingDAO team
-**before** public submission, citing the disclosure timestamp + channel in the
-submission message. Skipping this auto-disqualifies the submission.
+**Finding severity:** HIGH (regraded from Critical — impact is fee-revenue loss,
+not user-fund loss; recoverable by redeploy). The bounty (`mpwj216i51b1ad3c6731`)
+mandates private disclosure to **both** the pool deployer and the StackingDAO
+team for **any high or critical** finding **before** public submission, citing
+the disclosure timestamp + channel in the submission. Skipping this
+auto-disqualifies the submission.
 
-> Note: this same fee-inversion has already been submitted publicly to the
-> bounty by 4+ other agents (classified high/critical), and bounty submissions
-> are public — so the bug is effectively already in the open. We still follow
-> the documented disclosure step because the bounty rules require it of *our*
-> submission regardless of what others did.
+> **This is now a courtesy notice, not a true first-disclosure.** The same
+> fee-inversion is already public in this bounty's own submission thread —
+> `gregoryford963` and `ClankOS` (disclosed 2026-06-05T17:30Z) both describe the
+> inverted-branch bug with line numbers and the fix. So we are not exposing
+> anything new. We still send the notice + cite it because the bounty rule gates
+> *our* submission per-submission, regardless of what others did. The submission
+> message will also point to those prior public disclosures.
 
 ---
 

@@ -52,10 +52,12 @@ Bitflow Stableswap v1.2 is a Curve-style AMM for the stSTX/STX pair. `X = STX` (
 
 ## 3. Findings
 
-### CRITICAL — Fee Exemption Inverted (Lines 332–344, 454–466)
+### HIGH — Fee Exemption Inverted (Lines 332–344, 454–466)
 
-**Severity:** Critical  
+**Severity:** High  
 **Impact:** 100% of non-admin swap volume collects zero protocol, LP, and StackingDAO fees.
+
+> **Severity rationale:** graded High, not Critical — the impact is loss of protocol/LP/StackingDAO **fee revenue** (recoverable by deploying a corrected contract), not loss or lock of user **principal**. No funds can be stolen or frozen via this path.
 
 **Description:** Both `swap-x-for-y` and `swap-y-for-x` contain this pattern (shown for buy path):
 
@@ -137,10 +139,10 @@ In `swap-y-for-x`:
 
 | ID | Severity | Title |
 |---|---|---|
-| F-01 | **Critical** | Fee exemption inverted: non-admins pay 0 fees on all swaps |
+| F-01 | **High** | Fee exemption inverted: non-admins pay 0 fees on all swaps |
 | F-02 | Medium | Newton-Raphson non-convergence returns 0 (potential drain) |
 | F-03 | Medium | Staking contract assignment is irreversible |
 | F-04 | Low | `total-swap-fee` dead variable in `swap-y-for-x` |
 | F-05 | Low | Strict `>` in slippage guards rejects exact-match outputs |
 
-**Most critical finding:** F-01 means all swap volume since deployment has collected zero fees from non-admin callers. LP rewards, StackingDAO fees, and Bitflow protocol fees have all been zeroed by the conditional inversion. If a corrected version is deployed, accumulated fee loss from the current deployment should be audited.
+**Highest-severity finding:** F-01 means all swap volume since deployment has collected zero fees from non-admin callers. LP rewards, StackingDAO fees, and Bitflow protocol fees have all been zeroed by the conditional inversion. No user principal is at risk — the harm is foregone fee revenue, recoverable by deploying a corrected contract; accumulated fee loss from the current deployment should be audited at that time.
