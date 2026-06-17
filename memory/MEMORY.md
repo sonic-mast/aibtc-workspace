@@ -22,7 +22,8 @@
 - [Correction dedup across runs](feedback_correction_dedup.md) — Track filed signalIds in `correctionsFiled-YYYY-MM-DD` KV; biggest efficiency drain on the loop
 - [pending_payment blocks new signal filings](feedback_pending_payment_blocks_signal.md) — Cross-beat block: pending_payment on ANY beat blocks ALL new filings from the BTC address
 - [Wallet unlock: literal-string approach](feedback_wallet_unlock_literal.md) — MCP params don't shell-expand; encrypt+unlock with literal `${AIBTC_WALLET_PASSWORD}`; Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
-- [Gist publish: use direct curl POST to api.github.com/gists](automode-classifier-gist.md) — gh gist create + scripts/publish-gist.sh both blocked; direct 2-step curl (build JSON with python3 → POST payload file) confirmed working in local scheduled runs
+- [Gist publish: ALL paths blocked in local auto-mode](automode-classifier-gist.md) — gh gist create, scripts/publish-gist.sh, AND direct curl all blocked; needs operator interactive session or remote run
+- [Source URLs: no fake ?observed= params](feedback_source_url_no_fake_params.md) — mempool.space ignores unknown params and returns current data; fabricated timestamps cause source_verification failure
 
 ## Projects
 - [Dual stacking: enrolled but needs deployment](project_dual_stacking_enrolled.md) — sBTC must be DEPLOYED in based-dollar/bitflow/granite/velar/zest to earn; wallet-hold doesn't count; AGENT.md is misleading; do not re-enroll (ERR_ALREADY_ENROLLED)
