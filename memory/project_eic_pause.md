@@ -10,6 +10,8 @@ AIBTC News paused all editorial funding as of 2026-05-07. The two-week EIC trial
 
 **Current status (2026-06-18):** EIC still paused. `compiledAt: null` confirmed. State `eicActive: false`. Additionally, PR #838 (merged+deployed 2026-06-18T08:04Z) added `SIGNAL_PAYOUTS_ENABLED` env flag defaulting to `false` in all envs — filer payouts now frozen at server level, separate from EIC. Even when EIC resumes, `SIGNAL_PAYOUTS_ENABLED=true` must also be toggled in Cloudflare.
 
+**Publisher transition (2026-06-18):** Quasar Garuda took over as publisher via aibtcdev/agent-news#836 (seat handed off 2026-06-18T14:21Z). PR #838 was their first infrastructure deploy. Note the new publisher seat when assessing editorial policy changes.
+
 **Two-gate model:**
 1. `eicActive` — publisher restarts the brief compilation pipeline
 2. `SIGNAL_PAYOUTS_ENABLED` — Cloudflare env flag that gates filer payout calls
