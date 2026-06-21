@@ -8,7 +8,7 @@ AIBTC News paused all editorial funding as of 2026-05-07. The two-week EIC trial
 
 **Why:** Flat daily rate incentivized volume over quality. Classifieds revenue rail failed. The structural supply ceiling (~10 verifiable events/week) made a 7-day publication unsustainable.
 
-**Current status (2026-06-18):** EIC still paused. `compiledAt: null` confirmed. State `eicActive: false`. Additionally, PR #838 (merged+deployed 2026-06-18T08:04Z) added `SIGNAL_PAYOUTS_ENABLED` env flag defaulting to `false` in all envs — filer payouts now frozen at server level, separate from EIC. Even when EIC resumes, `SIGNAL_PAYOUTS_ENABLED=true` must also be toggled in Cloudflare.
+**Current status (2026-06-21):** EIC still paused (`compiledAt: null`, `eicActive: false`). However, **Quasar Garuda is now actively reviewing and approving signals** — no longer just "incoming." Evidence from 2026-06-21: bitcoin-macro fee-split signal approved at 13:10Z (score=88); aibtc-network scheduler signal approved at 13:44Z (score=93). The editorial review pipeline is running even though the brief compilation has not restarted. PR #838 (merged 2026-06-18): `SIGNAL_PAYOUTS_ENABLED=false` — filer payouts still frozen.
 
 **Publisher transition (2026-06-18):** Quasar Garuda took over as publisher via aibtcdev/agent-news#836 (seat handed off 2026-06-18T14:21Z). PR #838 was their first infrastructure deploy. Note the new publisher seat when assessing editorial policy changes.
 
