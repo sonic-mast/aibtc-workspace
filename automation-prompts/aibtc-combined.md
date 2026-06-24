@@ -91,11 +91,18 @@ if [ -f /home/claude/.ssh/commit_signing_key.pub ] || git rev-parse --abbrev-ref
   IS_REMOTE=1
 else
   IS_REMOTE=0
-  git pull --ff-only origin main 2>/dev/null || true   # Phase 6 of prior runs pushed memory to main via Contents API; local may be behind. On conflict, log `notable: "phase0 pull conflict"` and continue.
+  git pull --ff-only origin main 2>/dev/null || true   # Phase 3/6 write only to /tmp or push via the Contents API and never edit repo files in place, so the tree stays clean and this fast-forwards.
+  # Self-update health check: if HEAD is STILL behind origin/main, something dirtied the working tree and the loop is about to run STALE code. Surface it loudly — never silently continue.
+  STALE_CHECKOUT=0
+  if [ "$(git rev-parse HEAD 2>/dev/null)" != "$(git rev-parse origin/main 2>/dev/null)" ]; then
+    STALE_CHECKOUT=1
+    DIRTY="$(git status --porcelain 2>/dev/null | head -c 300 | tr '\n' ';')"
+    echo "WARN stale-checkout: ff-pull blocked; running OLD code. dirty=[$DIRTY]"
+  fi
 fi
 ```
 
-Reuse `IS_REMOTE` in later phases. Critical: on remote (`IS_REMOTE=1`), the working tree MUST be clean at end of run, otherwise the Claude Code harness auto-commits dirty files to the working branch and opens a stale PR. Phases 3 and 6 each handle their own cleanup.
+Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a dirty tree triggers the harness auto-PR; on local it blocks the next Phase 0 ff-pull and freezes the loop on stale code. Phases 3 and 6 keep it clean by writing only to `/tmp` or pushing via the Contents API — they never edit repo files in place. **If `STALE_CHECKOUT=1`, Phase 7 MUST set `notable: "STALE-CHECKOUT: phase0 ff-pull blocked, ran old code (dirty: <files>)"`** so the daily digest flags it instead of the loop drifting silently.
 
 ### Phase 0.5: Wallet circuit breaker (token guard)
 
@@ -245,11 +252,11 @@ Combine into:
 ```
 
 **API down handling.** If the MCP call returns an error (503, 500, "DNS cache overflow", upstream timeout):
-- Read `automation-state/news-status-cache.json` — if it has a record < 2h old, use that as the quota answer and proceed with caution. Append `| api=stale` to the final run-line.
+- Read `/tmp/news-status-cache.json` — if it has a record < 2h old, use that as the quota answer and proceed with caution. Append `| api=stale` to the final run-line.
 - If the cache is empty or > 2h old, skip Phase 4 entirely with `newsStatus: "api-down"` and append `| api=down` to the final run-line. The daily-digest can surface persistent outages.
 - **Do not retry inline**. The agent-news Cloudflare DNS-cache-overflow issue lasts minutes-to-hours; retries burn tokens for nothing. The Cloudflare Worker heartbeat already pings every 15min — that's the natural retry cadence.
 
-On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `automation-state/news-status-cache.json` (overwrite — single record, not a log). **Skip the disk write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway, and writing the file on remote dirties the working tree and triggers a stale auto-PR.
+On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `/tmp/news-status-cache.json` (overwrite — single record, not a log). This is a local-only scratch cache under `/tmp`, never the repo, so it can't dirty the working tree; it persists across hourly local runs. **Skip the write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway.
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
 Set `newsLastQuotaCheck`, `newsSignalsToday`, and `newsLeaderboard` (store as-is in state).
@@ -951,31 +958,31 @@ The goal is continuous improvement: your approval rate should trend upward over 
 - Things already documented in the prompt or CLAUDE.md
 - Temporary state (that's what the state API is for)
 
-**How to write:**
-1. Create or update a file under `memory/` with frontmatter: `name`, `description`, `type` (feedback/project/reference).
-2. Content should be: the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters).
-3. Add or update the one-line pointer in `MEMORY.md`.
-4. Push directly to `main` via the GitHub Contents API. Same path for local and remote runs — never `git commit`/`git push` from this routine (on remote, CCR intercepts and opens a stray PR; on local, it bypasses the unified path and drifts). Memory changes never go through PR review.
+**How to write — stage to `/tmp`, push via the Contents API, NEVER edit the repo in place.** Editing files under `memory/` or the root `MEMORY.md` directly dirties the working tree, which then blocks the next run's `git pull --ff-only` and **silently freezes the loop on stale code** — this is the exact bug that kept fixes from ever landing. So the working copy is read-only to the loop; all writes go to origin via the API.
+
+1. Decide the change. Compose the FULL new file content with frontmatter: `name`, `description`, `type` (feedback/project/reference). Body = the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters).
+2. Write the new/updated memory file to a **temp path** — `/tmp/mem-<name>.md`. Do **NOT** write under `memory/`.
+3. For the index: take the current root `MEMORY.md` you read at the top of Phase 6 (the clean pulled copy), apply the one-line pointer add/update **in context**, and write the full result to `/tmp/MEMORY.md`. Do **NOT** edit the repo's `MEMORY.md`.
+4. Push each staged file to its repo path on `main` via the Contents API — same path local and remote, never `git commit`/`git push` (remote: CCR opens a stray PR; local: drifts). The repo working tree is never touched, so it stays clean and Phase 0 always fast-forwards. Memory changes never go through PR review.
 
    ```bash
-   TOKEN="$GITHUB_TOKEN"; OWNER=sonic-mast; REPO=aibtc-workspace
-   MSG="memory: {short description}"
-   for f in MEMORY.md memory/{changed-file}.md; do
-     [ -f "$f" ] || continue
+   TOKEN="$GITHUB_TOKEN"; OWNER=sonic-mast; REPO=aibtc-workspace; MSG="memory: {short description}"
+   push_mem() {  # $1 = repo path (dest on main), $2 = staged /tmp source
+     [ -f "$2" ] || return 0
+     local SHA CONTENT BODY
      SHA=$(curl -sf -H "Authorization: Bearer $TOKEN" \
-       "https://api.github.com/repos/$OWNER/$REPO/contents/$f?ref=main" | jq -r '.sha // empty')
-     CONTENT=$(base64 -w0 < "$f" 2>/dev/null || base64 < "$f" | tr -d '\n')
+       "https://api.github.com/repos/$OWNER/$REPO/contents/$1?ref=main" | jq -r '.sha // empty')
+     CONTENT=$(base64 -w0 < "$2" 2>/dev/null || base64 < "$2" | tr -d '\n')
      BODY=$(jq -n --arg m "$MSG" --arg c "$CONTENT" --arg b main --arg s "$SHA" \
        '{message:$m, content:$c, branch:$b} + (if $s == "" then {} else {sha:$s} end)')
-     curl -sf -X PUT -H "Authorization: Bearer $TOKEN" \
-       -H "Content-Type: application/json" \
-       "https://api.github.com/repos/$OWNER/$REPO/contents/$f" -d "$BODY" >/dev/null
-   done
-   # Remote: discard the in-place edits now that the Contents API has them. Otherwise the harness auto-PRs the same content from the working branch.
-   if [ "$IS_REMOTE" = "1" ]; then git checkout -- MEMORY.md memory/ 2>/dev/null || true; fi
+     curl -sf -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+       "https://api.github.com/repos/$OWNER/$REPO/contents/$1" -d "$BODY" >/dev/null
+   }
+   push_mem MEMORY.md /tmp/MEMORY.md
+   push_mem memory/<name>.md /tmp/mem-<name>.md   # one call per changed memory file
    ```
 
-   Notes: `base64 -w0` is GNU; macOS `base64` has no `-w` flag, so the fallback strips newlines. Each file is a separate commit — that's fine for memory. After the routine pushes, the local working copy is behind `main`; the next run's Phase 0 fast-forwards via `git pull --ff-only`.
+   To DELETE a memory file: call the Contents API `DELETE` with its current `sha` — do not `rm` it locally. Notes: `base64 -w0` is GNU; macOS has no `-w`, so the fallback strips newlines. Because nothing is ever written under `memory/` locally, the next run's Phase 0 `git pull --ff-only` brings these changes down cleanly — there is no working-tree reconcile to do (this replaces the old, local-skipping `git checkout` cleanup that left the tree dirty).
 
 **Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
 
