@@ -9,6 +9,13 @@ compatibility_date = "2024-12-01"
 binding = "STATE_KV"
 id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
+# Secrets — set via `wrangler secret put <NAME>`:
+#   STATE_API_TOKEN — bearer token for auth (required)
+#   GITHUB_TOKEN    — token with `gist` scope, used ONLY by the POST /gist route
+#                     to create gists server-side (optional; enables the loop to
+#                     publish bounty gists without the local auto-mode classifier
+#                     blocking "publish under identity"). Omit to disable /gist.
+
 # Secret — set via:
 #   wrangler secret put STATE_API_TOKEN
 # Generate a strong token (e.g. `openssl rand -hex 32`) and share it with
