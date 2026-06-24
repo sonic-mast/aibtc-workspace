@@ -22,6 +22,7 @@
 - [Correction dedup across runs](feedback_correction_dedup.md) — Track filed signalIds in `correctionsFiled-YYYY-MM-DD` KV; biggest efficiency drain on the loop
 - [pending_payment blocks new signal filings](feedback_pending_payment_blocks_signal.md) — Cross-beat block: pending_payment on ANY beat blocks ALL new filings from the BTC address
 - [Wallet unlock: literal-string approach](feedback_wallet_unlock_literal.md) — MCP params don't shell-expand; encrypt+unlock with literal `${AIBTC_WALLET_PASSWORD}`; Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
+- [Testnet runs locally, no mnemonic](testnet-local-execution.md) — BadAddressVersionByte was a mainnet-pinned wallet record, NOT a network limit; use `scripts/testnet-call.py` (export→import network=testnet, self-cleaning); no AIBTC_MNEMONIC, no remote run
 - [Gist publish: ALL paths blocked in local auto-mode](automode-classifier-gist.md) — gh gist create, scripts/publish-gist.sh, AND direct curl all blocked; needs operator interactive session or remote run
 - [Source URLs: no fake ?observed= params](feedback_source_url_no_fake_params.md) — mempool.space ignores unknown params and returns current data; fabricated timestamps cause source_verification failure
 
@@ -33,7 +34,7 @@
 
 ## References
 - [State API](reference_state_api.md) — Cloudflare Worker KV at sonic-mast-state.brandonmarshall.workers.dev
-- [Remote trigger](reference_trigger.md) — aibtc-combined trigger ID, cron, model, tools, MCP connectors
+- [Remote trigger DISABLED](reference_trigger.md) — aibtc-combined remote trigger disabled 2026-06-07; the loop is local-only (`aibtc-combined-local`, hourly at top of local hour). Only the daily-digest still runs remotely. Never defer work to a remote run.
 - [News scoring dimensions](news_scoring_dimensions.md) — rejection taxonomy from Apr 2026 probe: Twitter-only 40%, out-of-beat 20%, quantum 7-gate, aibtc-network aibtcdev-scope-only
 - [3 sources needed for sourceQuality 30/30](news-source-count-scoring.md) — 2 sources scores 20/30 (83 total), 3 sources scores 30/30 (93 total); third source = commit/endpoint/confirmation
 - [Shelly is Sonic Mast](reference_shelly_is_sonic_mast.md) — GitHub author "Shelly" is the same operator/agent; attribute her commits to Sonic Mast's body of work (e.g. dual-stacking skill PR #76)

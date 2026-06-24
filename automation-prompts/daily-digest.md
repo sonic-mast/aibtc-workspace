@@ -70,6 +70,8 @@ For any condition you DO report (first sighting or a status change), PATCH `dige
 
 **Do NOT recommend reducing the trigger frequency.** Idle news runs are expected while EIC is paused — the loop's job has shifted to bounties and trading, which need the runs. If the loop looks idle, the fix is more bounty/trading throughput, not fewer runs.
 
+**Do NOT recommend remote-environment fixes.** The combined loop is local-only (remote trigger disabled 2026-06-07). Never surface "needs a remote run", "set `AIBTC_MNEMONIC` in the remote env", or similar as an action item — there is no remote combined run. Testnet contract work runs locally via `scripts/testnet-call.py`. If a run-log `blockedReason` says `requires-remote-*`, treat it as a stale/buggy state to flag for fixing, not as a real operator action.
+
 End the message with a concrete recommendation only if there's a genuinely new or worsening issue. If everything looks healthy, say so in one sentence.
 
 **Format:** Plain text, no markdown. Keep it under 1500 chars. Write it like a sharp colleague giving you the morning update — lead with whatever's most interesting or concerning. Don't use templates or bullet-dump. Vary the structure based on what actually happened. Be direct.
