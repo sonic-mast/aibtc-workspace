@@ -4,16 +4,16 @@ Read `SOUL.md` first. It defines who you are.
 
 ## Architecture
 
-Single combined loop, running on an overlapping remote + local cadence so coverage continues even when the operator's machine is off:
+The combined loop **runs locally only.** The remote cloud trigger was disabled 2026-06-07, so the local scheduled task is the sole driver of the loop. The only pieces still in the cloud are the daily digest and the Cloudflare heartbeat beacon.
 
 | Task | Model | Where | Schedule | Purpose |
 |---|---|---|---|---|
-| `aibtc-combined` | sonnet | Claude Code remote trigger | `8 */2 * * *` (every 2h at :08 UTC) | Heartbeat floor — runs in the cloud regardless of operator machine state |
-| `aibtc-combined` | sonnet | Local Claude Code scheduled task | `38 * * * *` (hourly at :38 UTC) | Fills in the odd hours when the operator's machine is on — same prompt, offset schedule |
-| `daily-digest` | sonnet | Local Claude Code scheduled task | `0 1 * * *` (01:00 UTC) | Read run logs, send Telegram recap, prune logs |
+| `aibtc-combined` | sonnet | **Local** Claude Code scheduled task (`aibtc-combined-local`) | `0 * * * *` (hourly, top of the operator's *local* hour, +~6 min jitter) | The loop — inbox, GitHub, news, bounties, trading |
+| `aibtc-combined` | sonnet | ~~Claude Code remote trigger~~ | **DISABLED 2026-06-07** (`trig_01Cwuup6…`) | Former cloud heartbeat floor; no longer runs |
+| `daily-digest` | opus | **Remote** Claude Code trigger | `0 1 * * *` (01:00 UTC) | Read run logs, send Telegram recap, prune logs |
 | Cloudflare Worker | — | Cloudflare cron | `*/15 * * * *` (every 15 min) | Heartbeat beacon to aibtc.com + state API |
 
-The combined prompt (`automation-prompts/aibtc-combined.md`) runs all phases sequentially. Each phase self-skips when there's no work. Both remote and local triggers point to the same prompt file — the state API is the coordination layer.
+The combined prompt (`automation-prompts/aibtc-combined.md`) runs all phases sequentially; each self-skips when there's no work. **Because the loop is local-only, never defer work to "the next remote run" — there isn't one.** If the operator's machine is off the loop simply pauses until it's back on; only the Cloudflare beacon and the remote daily digest keep running. The state API is still the cross-run coordination layer.
 
 ## State
 
@@ -55,8 +55,8 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 | Variable | Purpose |
 |---|---|
 | `AIBTC_WALLET_PASSWORD` | Unlock encrypted wallet |
-| `AIBTC_MNEMONIC` | Recreate wallet in remote environments |
-| `NETWORK` | Stacks network (mainnet) |
+| `AIBTC_MNEMONIC` | Recreate wallet in ephemeral remote envs. **Not set locally and not needed** — local wallet is a persisted keystore; the seed is recoverable via `wallet_export`. |
+| `NETWORK` | Stacks network for the persisted wallet (`mainnet`). Testnet is derived on-demand from the same seed via `scripts/testnet-call.py` — no separate env needed. |
 | `GITHUB_TOKEN` | Sonic Mast's GitHub account (classic PAT) |
 | `STATE_API_TOKEN` | Cloudflare Worker KV auth |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers API |
@@ -78,7 +78,7 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 - Quality over volume for news signals.
 - Check before doing — early exit saves tokens.
 - Keep JSON valid: double-quoted keys, no comments, no trailing commas.
-- Runs in both remote and local Claude Code environments — prompts must work with mnemonic env var (no interactive prompts, wallet unlock via Agent sub-task).
+- The combined loop runs **locally only** (remote trigger disabled 2026-06-07) — never defer work to "the next remote run." The wallet is a persisted local keystore unlocked by password; call MCP tools directly (NOT via an Agent sub-task, which can't see the unlocked wallet). `AIBTC_MNEMONIC` is not set locally and is not needed — the seed is recoverable via `wallet_export`. Testnet contract calls run locally via `scripts/testnet-call.py` (see `memory/testnet-local-execution.md`).
 - Never fabricate contract addresses or API URLs. Verify on-chain first.
 - News signal disclosure goes ONLY in the `disclosure` field, never in body text.
 - Sync fork main with upstream before every new branch.
