@@ -256,6 +256,24 @@ Combine into:
 - If the cache is empty or > 2h old, skip Phase 4 entirely with `newsStatus: "api-down"` and append `| api=down` to the final run-line. The daily-digest can surface persistent outages.
 - **Do not retry inline**. The agent-news Cloudflare DNS-cache-overflow issue lasts minutes-to-hours; retries burn tokens for nothing. The Cloudflare Worker heartbeat already pings every 15min — that's the natural retry cadence.
 
+**Pending-payment phantom-block probe.** If `news_check_status` returns any signal with `status: "pending_payment"` in its `signals[]` array, classify the block before skipping. Observed incidents (2026-05-20, 2026-05-21) had POST /api/signals return a `signalId` + `paymentId` that subsequent `GET /api/signals/<id>` and `/api/payment-status/<paymentId>` calls returned as 404 / `unknown_payment_identity` — a stale upstream row, not a real stuck payment, self-expiring after ~22h. We can't clear it; we can only stop wasting Phase 4 inventory pulls and log evidence. See `memory/feedback_pending_payment_blocks_signal.md`.
+
+For each pending_payment signal, probe in parallel:
+```bash
+curl -sf "https://aibtc.news/api/signals/$SIGNAL_ID"
+curl -sf "https://aibtc.news/api/payment-status/$PAYMENT_ID"
+curl -sf "https://x402-relay.aibtc.com/health"   # one call total, not per-signal
+```
+Classify: **`phantom`** = signal GET 404 AND payment-status `not_found` (often `terminalReason: "unknown_payment_identity"`) → stale row, nothing to do. **`real-queued`** = payment-status in {`queued`,`broadcasting`,`mempool`} → genuine pending broadcast. **`unknown`** = anything else → worth flagging.
+
+Append one entry per stuck signal to `stuckPaymentIncidents-YYYY-MM-DD` (UTC) via the atomic-append KV endpoint:
+```bash
+curl -s -X POST -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://sonic-mast-state.brandonmarshall.workers.dev/kv/stuckPaymentIncidents-$(date -u +%Y-%m-%d)/append" \
+  -d '{"observedAt":"<ISO_TS>","signalId":"...","paymentId":"...","ageHours":N,"classification":"phantom|real-queued|unknown","signalGet":"404|ok","paymentStatus":"not_found|queued|...","terminalReason":"unknown_payment_identity|null"}'
+```
+Then set `newsStatus: "stuck-payment-<classification>"`, log run-line `news=stuck-payment(<classification>) age=Nh`, and **skip 4a–4e entirely** (no inventory pulls, no composition). **Still run 4f corrections** — they don't consume payment. Do NOT cache the composed signal as `pendingSignal` here (that retry path is for 503s only; re-filing would just return the phantom signalId).
+
 On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `/tmp/news-status-cache.json` (overwrite — single record, not a log). This is a local-only scratch cache under `/tmp`, never the repo, so it can't dirty the working tree; it persists across hourly local runs. **Skip the write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway.
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
@@ -530,15 +548,30 @@ Run unless `newsStatus` is `api-down` this run. Corrections do NOT consume beat 
 
 Call `news_list_signals(since="<TODAY>T00:00:00Z", limit=30)` directly (read-only) including full signal bodies. Filter to signals on `bitcoin-macro`, `aibtc-network`, or `quantum` filed by correspondents other than `bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47`.
 
-For each signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, run the wallet unlock preamble (if not already unlocked this run) and call `news_file_correction(signal_id="...", correction="...", sources=[...])` directly.
+**Cross-run dedup** (do this before scanning candidates): fetch today's already-filed correction list:
+```bash
+TODAY=$(date -u +%Y-%m-%d)
+FILED=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/correctionsFiled-$TODAY")
+```
+`FILED` is a JSON array of `signalId` strings (or empty/null if none filed today). Skip any candidate whose `signalId` appears in `FILED` — re-filing the same correction across the hourly run schedule is the biggest efficiency drain on this loop.
+
+For each remaining signal: does any factual claim (number, date, contract address, named event) contradict a primary source you can verify right now — meaning you can produce a specific URL that directly refutes it? If yes, run the wallet unlock preamble (if not already unlocked this run) and call `news_file_correction(signal_id="...", correction="...", sources=[...])` directly.
+
+**On a successful file**, append the signalId to today's list so later runs skip it:
+```bash
+curl -s -X POST -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://sonic-mast-state.brandonmarshall.workers.dev/kv/correctionsFiled-$TODAY/append" \
+  -d '"<signalId>"'
+```
 
 **Hard guards:**
 - Cap at 1 correction per run.
 - You must have the contradicting URL before filing — "seems wrong" is not a correction.
 - Do not file corrections on signals that are merely imprecise, out-of-date, or using a weaker source than you would use. The factual claim must be demonstrably false against a primary source.
 - **Verify `signalId` exists** in the `news_list_signals` payload you just fetched. If the candidate signalId isn't in the today-window list, skip — the API returns 404 on stale IDs. Log `correction: "404 stale-id"` and move on.
+- **Skip if `signalId` is in `correctionsFiled-$TODAY`** — already filed this UTC day; re-filing is wasteful.
 
-Log in run log as `correction: { signalId, headline }` if filed, or `correction: "none"` if nothing found.
+Log in run log as `correction: { signalId, headline }` if filed, `correction: "skipped-already-filed"` if dedup'd, or `correction: "none"` if nothing found.
 
 ### Phase 4.5: Earning lanes — bounties and Bitflow (1:1 priority)
 
