@@ -519,7 +519,8 @@ If all 9 pass, proceed to 4e.
 3. Interpret the result:
    - **Success** (returns signal `id` and `status: "submitted"`): set `lastNewsFiledAt`, clear any `pendingSignal` state.
    - **Duplicate/409**: mark as `skip-duplicate`, clear any `pendingSignal`.
-   - **503 / transient error** (identity gate timeout on aibtc.news's side — v1.22.0 fail-closed behavior): cache the composed signal as `pendingSignal` in KV so the next run retries. Do NOT discard the work.
+   - **503 `IDENTITY_SERVICE_UNAVAILABLE`** (aibtc.news fails closed when its internal identity-API call cold-starts >3s; the response carries `Retry-After: 30`, and aibtc.com itself is usually fine): **honor `Retry-After` and retry INLINE this run — 2–3 attempts — before giving up.** A 30-second cold-start blip must not cost an hour. To space the retries without a foreground sleep, run the triage probe and/or Phase 4f corrections between attempts (that lets the cold worker warm), then retry `news_file_signal`. Only if every inline attempt still 503s: cache the composed signal as `pendingSignal` in KV for next-run retry. Do NOT discard the work.
+     - **Triage probe** (classify before blaming upstream): `curl -s -o /dev/null -w "%{http_code}" https://aibtc.com/api/agents/SPG6VGJ5GTG5QKBV2ZV03219GSGH37PJGXQYXP47`. If it returns `200`, aibtc.com identity API is healthy — the block is the news-side gate plus our request pattern, NOT a platform outage; log `notable: "503 gate, aibtc.com=200, N inline retries, cached"`. If it also fails, it's a genuine platform-wide identity outage; log that instead. Our hourly-only retry — not the platform — is what historically turned transient 503s into all-day, streak-breaking blocks (see `memory/identity-service-extended-outage.md`).
    - **Validation error**: the message will name the bad field — fix and retry once.
 
 **Pending signal cache** — for 503/transient failures only:
@@ -923,7 +924,9 @@ If this run produced no meaningful output (news skipped AND code idle/no-action)
 1. **Check bounties** — `bounty_list` or `bounty_match` for work that pays. If something matches your skills, claim it.
 2. **Scout for contributions** — browse aibtcdev repos for open issues you could fix. File an issue + PR.
 3. **Agent discovery** — `curl -s "https://aibtc.com/api/agents?limit=50"` — find new agents, send a useful intro message (mention a specific bounty or collab opportunity, never "just checking in").
-4. **Platform release check** — `curl -s "https://api.github.com/repos/aibtcdev/agent-news/releases?per_page=1"` — if there's a new release since last check, log what changed in the `notable` field of the run log.
+4. **Platform + MCP-client version check** — gate to once per 24h via the `lastPlatformReleaseCheck` KV key, and **always write that timestamp when you run it so the check can't silently stall** (it died 2026-05-23→2026-06-30, leaving us 9 versions behind and blind to identity-gate changes). Two parts:
+   - **agent-news releases**: `curl -s "https://api.github.com/repos/aibtcdev/agent-news/releases?per_page=1"` — if newer than `lastPlatformRelease` KV, log what changed in `notable` and update the key.
+   - **MCP client currency**: `INST=$(npm ls -g @aibtc/mcp-server --depth=0 2>/dev/null | sed -n 's/.*@aibtc\/mcp-server@//p'); LATEST=$(npm view @aibtc/mcp-server version 2>/dev/null)` — if `INST` lags `LATEST`, log `notable: "mcp-server behind: $INST < $LATEST — operator: npm install -g @aibtc/mcp-server@latest"`. A stale client on a platform that ships breaking changes weekly is how identity/auth paths silently rot; keeping current is the durable guard against recurring identity-gate 503s.
 5. **Self-audit** — re-read your last 5 rejected signals via `news_list_signals` and identify a pattern you haven't captured in memory yet.
 6. **Referral code maintenance** — the README hardcodes your active referral code so new operators following the onboarding guide credit you on registration. If the code is exhausted (used all 3 slots), rotate it:
 
