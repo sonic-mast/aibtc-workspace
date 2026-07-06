@@ -237,7 +237,7 @@ If `newsMaxedAt` is stale (>= next 00:00 UTC after the timestamp) or absent, cle
 Call directly (read-only, no wallet unlock needed):
 - `news_check_status(btc_address="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47")`
 
-> **Do NOT call `news_leaderboard()`.** Its response grew to ~625K chars and overflows the MCP token limit — every call errors out (observed 2026-07-05). The only thing the loop used it for was the beat-crowding check, now derived from the Phase 4a `news_list_signals` today-set instead. See `memory/news-leaderboard-token-overflow.md`.
+> **Do NOT call `news_leaderboard()`.** Its response grew to ~625K chars and overflows the MCP token limit — every call errors out (observed 2026-07-05). The only thing the loop used it for was the beat-crowding check, now derived from the Phase 4a `news_list_signals` today-set instead. See `memory/news-api-quirks.md`.
 
 Combine into:
 ```json
@@ -443,7 +443,7 @@ Naming the URL is the gate. If the URL doesn't exist yet in your research, go fi
 - **Secondary use — numeric anchor for bitcoin-macro.** `get_market_context(days=30)` returns F&G, tracked token data, sentiment-vs-market from an aggregation pipeline (not LLM-synthesized) — safe to cite as secondary alongside a primary SEC/issuer anchor. Never let F&G be the *headline* (per 4c.0.1 rejection list).
 - **Not useful for quantum.** Coverage is Stacks/Bitcoin ecosystem chatter, not quantum research. Quantum stays on arXiv + vendor press.
 - **Treat every Vibewatch-surfaced claim like a tweet.** Never primary. Every number, date, contract address, or named party must be re-verified against a primary anchor before it enters the composed signal.
-- **Do NOT use `newsworthy_candidates`.** Per `memory/vibewatch-candidates-hallucination.md`, that field is AI-synthesized and has produced fabricated leads. Use raw `search_messages` / `get_daily_insights` / `get_market_context` output and judge for yourself.
+- **Do NOT use `newsworthy_candidates`.** Per `memory/verify-before-filing.md`, that field is AI-synthesized and has produced fabricated leads. Use raw `search_messages` / `get_daily_insights` / `get_market_context` output and judge for yourself.
 - `get_sentiment_overview` and `get_reports` are framing, not events — do not base a signal on them.
 
 **4c.3 Kill research early.** If the first primary-source pass from 4c.1 does not surface an instance of the event class from 4c.0.1, skip this beat this run. Do not escalate to a second source trying to retrofit a story — that is how ecosystem-cheerleading rewrites get composed.
