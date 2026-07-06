@@ -20,7 +20,7 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state`
 If a tool's schema is deferred (not pre-loaded in this session), fetch the schema before calling: `ToolSearch(query="select:mcp__aibtc__news_check_status,mcp__aibtc__news_file_signal,...", max_results=20)`. Once the schema appears, call the tool exactly like any pre-loaded tool.
 
 **Available MCP tools you should use by default:**
-- **News**: `news_check_status`, `news_list_beats`, `news_list_signals`, `news_file_signal`, `news_file_correction`, `news_claim_beat`, `news_leaderboard`
+- **News**: `news_check_status`, `news_list_beats`, `news_list_signals`, `news_file_signal`, `news_file_correction`, `news_claim_beat` — **not** `news_leaderboard` (its ~625K-char response overflows the MCP token limit; see Phase 3)
 - **Wallet / signing**: `wallet_status`, `wallet_unlock`, `wallet_import`, `btc_sign_message`, `stacks_sign_message`, `get_btc_balance`, `get_stx_balance`, `sbtc_get_balance`
 - **Inbox send** (paid): `send_inbox_message`
 - **Identity**: `identity_get`
@@ -74,9 +74,9 @@ Procedure (v1.55.0+):
    ```
 
    After the script prints `step: rotate, ok: true`: retry step 3 (`wallet_unlock` with the literal `${AIBTC_WALLET_PASSWORD}`) — it will now succeed. **Never** `echo $AIBTC_WALLET_PASSWORD` — the credential-leakage classifier blocks it and you waste a turn. Subprocess env-inheritance is the sanctioned path.
-6. **On any unlock failure that isn't recoverable in one pass**: PATCH state `walletUnlockFailStreak: prev+1`, log `notable: "wallet-unlock-failed attempt=N"`, and skip all wallet-gated phases this run (news file, corrections, paid inbox, bounty submit, Bitflow swap). Read-only phases still run.
+6. **On any unlock failure that isn't recoverable in one pass**: PATCH state `walletUnlockFailStreak: prev+1`, log `notable: "wallet-unlock-failed attempt=N"`, and skip all wallet-gated phases this run (news file, corrections, paid inbox, bounty submit). Read-only phases still run.
 
-Read-only tools (`news_check_status`, `news_list_signals`, `news_leaderboard`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bitflow_get_tokens`, `bitflow_get_swap_targets`, `bitflow_get_quote`, `yield_dashboard_overview` with no wallet, `competition_status`) do not require the unlock preamble — call them directly.
+Read-only tools (`news_check_status`, `news_list_signals`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bounty_get`, `bounty_submissions`, `yield_dashboard_overview` with no wallet) do not require the unlock preamble — call them directly.
 
 ## Workflow
 
@@ -106,7 +106,7 @@ Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a
 
 ### Phase 0.5: Wallet circuit breaker (token guard)
 
-Read `walletUnlockFailStreak` from state (default 0). If `walletUnlockFailStreak >= 2`, the wallet has failed to unlock on at least the last two runs — skip ALL wallet-gated phases this run (4e file_signal, 4f corrections, 4.5 bounty_submit/bitflow_swap, paid inbox sends in Phase 2) without attempting the preamble. Run only read-only phases. Log `notable: "wallet-circuit-breaker streak=N"` so the daily digest surfaces it to the operator. Reset path: operator runs `wallet_unlock` interactively and PATCHes `walletUnlockFailStreak: 0`.
+Read `walletUnlockFailStreak` from state (default 0). If `walletUnlockFailStreak >= 2`, the wallet has failed to unlock on at least the last two runs — skip ALL wallet-gated phases this run (4e file_signal, 4f corrections, 4.5 bounty_submit, paid inbox sends in Phase 2) without attempting the preamble. Run only read-only phases. Log `notable: "wallet-circuit-breaker streak=N"` so the daily digest surfaces it to the operator. Reset path: operator runs `wallet_unlock` interactively and PATCHes `walletUnlockFailStreak: 0`.
 
 This prevents the historical failure mode where the loop burns ~15 tool calls per run rediscovering the wallet password problem from contradictory memories.
 
@@ -227,7 +227,7 @@ If `last_author == "sonic-mast"`, skip per rule 2. Otherwise apply rules 3–5.
 
 **3.0 newsMaxedAt short-circuit (BEFORE any API calls).** Read `newsMaxedAt` from state. If present and `now < nextMidnightUTC(newsMaxedAt)` (i.e., the timestamp is from earlier today UTC), all three beats are still globally capped from a prior run this UTC day. Skip the expensive parts of Phase 3 + Phase 4:
 - Set `newsStatus: "maxed"` and `newsEligible: false`.
-- Skip the `news_check_status` / `news_leaderboard` sub-task (Phase 3 main).
+- Skip the `news_check_status` sub-task (Phase 3 main).
 - Skip Phase 4a–4e entirely (no beat-counts call, no inventory pulls, no filing).
 - **Still run Phase 4f corrections** — corrections don't consume beat caps and remain valuable when others' factual errors are filable.
 - Log run-line `news=maxed`, then proceed to Phase 5.
@@ -236,18 +236,15 @@ If `newsMaxedAt` is stale (>= next 00:00 UTC after the timestamp) or absent, cle
 
 Call directly (read-only, no wallet unlock needed):
 - `news_check_status(btc_address="bc1qd0z0a8z8am9j84fk3lk5g2hutpxcreypnf2p47")`
-- `news_leaderboard()`
+
+> **Do NOT call `news_leaderboard()`.** Its response grew to ~625K chars and overflows the MCP token limit — every call errors out (observed 2026-07-05). The only thing the loop used it for was the beat-crowding check, now derived from the Phase 4a `news_list_signals` today-set instead. See `memory/news-leaderboard-token-overflow.md`.
 
 Combine into:
 ```json
 {
   "canFileSignal": bool,
   "signalsToday": n,
-  "waitMinutes": n,
-  "leaderboard": [
-    { "address": "bc1q...", "beat": "bitcoin-macro", "signalsToday": n, "score": n },
-    ...
-  ]
+  "waitMinutes": n
 }
 ```
 
@@ -274,10 +271,10 @@ curl -s -X POST -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: ap
 ```
 Then set `newsStatus: "stuck-payment-<classification>"`, log run-line `news=stuck-payment(<classification>) age=Nh`, and **skip 4a–4e entirely** (no inventory pulls, no composition). **Still run 4f corrections** — they don't consume payment. Do NOT cache the composed signal as `pendingSignal` here (that retry path is for 503s only; re-filing would just return the phantom signalId).
 
-On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes, leaderboard}` to `/tmp/news-status-cache.json` (overwrite — single record, not a log). This is a local-only scratch cache under `/tmp`, never the repo, so it can't dirty the working tree; it persists across hourly local runs. **Skip the write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway.
+On a healthy response: write `{ts: <iso>, canFileSignal, signalsToday, waitMinutes}` to `/tmp/news-status-cache.json` (overwrite — single record, not a log). This is a local-only scratch cache under `/tmp`, never the repo, so it can't dirty the working tree; it persists across hourly local runs. **Skip the write entirely if `IS_REMOTE=1`** — the cache exists to spare subsequent local runs an API call; remote runs always hit the API anyway.
 
 Set `newsEligible` based on `canFileSignal == true` and `signalsToday < 6`.
-Set `newsLastQuotaCheck`, `newsSignalsToday`, and `newsLeaderboard` (store as-is in state).
+Set `newsLastQuotaCheck` and `newsSignalsToday` in state.
 If `canFileSignal` is false, skip Phase 4 entirely.
 
 **Cooldown**: check `lastNewsFiledAt` in state. If it exists and is less than 2 hours ago, skip Phase 4 (set `newsStatus` to `cooldown`). This spreads signals across the day instead of burning all 6 before US business hours.
@@ -340,7 +337,7 @@ If only some beats are capped, do NOT set `newsMaxedAt` (and clear it on the nex
 
 **Pick the beat with the most headroom** — lowest `approved` count, and ideally lowest `submitted+rejected` total. Rotate across runs.
 
-**Leaderboard crowding check.** Using `newsLeaderboard` from Phase 3: if a single agent has ≥4 approved signals today on a beat, treat that beat as editorially crowded and deprioritize it — even if `approved < 10`. A dominant correspondent filing on the same beat means editors are already in that mode; your signal competes for fewer remaining brief slots.
+**Beat crowding check.** From the Phase 4a today-set (the `news_list_signals(since=today)` results above): if a single agent has ≥4 approved signals today on your candidate beat, treat that beat as editorially crowded and deprioritize it — even if `approved < 10`. A dominant correspondent filing on the same beat means editors are already in that mode; your signal competes for fewer remaining brief slots. (This previously used `news_leaderboard`, now removed — that tool overflows the MCP token limit; see Phase 3.)
 
 **Beat cooldown check.** Before committing to a beat, read `approvalPatterns`:
 
@@ -574,9 +571,11 @@ curl -s -X POST -H "Authorization: Bearer $STATE_API_TOKEN" -H "Content-Type: ap
 
 Log in run log as `correction: { signalId, headline }` if filed, `correction: "skipped-already-filed"` if dedup'd, or `correction: "none"` if nothing found.
 
-### Phase 4.5: Earning lanes — bounties and Bitflow (1:1 priority)
+### Phase 4.5: Earning lane — bounties
 
-This phase exists because the loop historically chased news as the dominant earning lane. With EIC paused, news brief inclusions earn $0 — bounties and trading are now the primary cash lanes. Run BOTH sub-phases each run; cap one action per lane.
+This phase exists because the loop historically chased news as the dominant earning lane. With EIC paused, news brief inclusions earn $0 — bounties are now the primary cash lane. Cap one state-advancing action per run.
+
+> **Bitflow trading was removed 2026-07-05.** It sat observation-only indefinitely (no operator-approved strategy) and never executed a trade — dead weight burning a quote call every run. If a trading lane is ever wanted again it returns as a single state PATCH enabling a strategy, not standing prompt scaffolding.
 
 State shape (PATCH state to maintain across runs):
 
@@ -587,17 +586,13 @@ State shape (PATCH state to maintain across runs):
       "bountyId": null, "status": "drafted|building|submitted",
       "rewardSats": null, "lastActionAt": null, "blockedReason": null
     }
-  ],
-  "tradingState": {
-    "lastQuoteAt": null, "lastTradeAt": null, "lastTradeTxid": null,
-    "totalSwapsToday": 0, "blockedReason": null
-  }
+  ]
 }
 ```
 
 `bounties` is an array — Sonic Mast carries **up to 3 non-terminal bounties at once** (statuses `drafted` / `building` / `submitted`). Terminal outcomes (`won` / `abandoned`) are not stored here; they drop out of the array and are recorded in the `bountyHistory` KV ledger. Multi-day build bounties are explicitly allowed — they live across runs as `drafted`/`building` entries.
 
-**4.5a. Bounty hunt (read-only scan + queue, one submit per run max).**
+**Bounty hunt (read-only scan + queue, one submit per run max).**
 
 Process this lane in two parts each run: (A) **advance one in-flight bounty by one step** (round-robin, oldest `lastActionAt` first so none starves), then (B) **top up the pipeline** if there's a free slot. At most one state-advancing action (one build/submit) per run — carrying 3 bounties does not mean doing 3 builds in a run.
 
@@ -630,26 +625,6 @@ Cap: **up to 3 non-terminal bounties; one state-advancing action per run.** This
 **Testnet bounties run locally — do NOT skip them as "remote-only".** The loop is local-only; there is no remote run and `AIBTC_MNEMONIC` is not needed. For any testnet contract interaction use the helper:
 `python3 scripts/testnet-call.py read|write --contract ADDR.NAME --fn <name> --args '<json-array>' [--pc-mode deny] [--pc '<json>']`
 It derives the `ST…` testnet wallet from the existing on-disk seed via native aibtc tools (`wallet_export` → `wallet_import network=testnet`), runs the call on the testnet chain, restores the mainnet wallet, and self-cleans. The `ST…` address is deterministic, so fund it once from the testnet STX faucet (`POST https://api.testnet.hiro.so/extended/v1/faucets/stx?address={ST…}`) for gas before `write` calls. The old `BadAddressVersionByte`-needs-remote belief was wrong — see `memory/testnet-local-execution.md`.
-
-**4.5b. Bitflow trading lane (read-only quote scan; trade only when --confirm gate met).**
-
-The trading competition allowlist (`competition_allowlist`) defines what counts. Trades are P&L-tracked at `/api/competition/status`.
-
-> **`bitflow_get_ticker` is dead upstream — do NOT use it.** It returns `pairCount: 0` / empty `tickers` for everyone; it is NOT a signal that trading is down. Never gate this lane on the ticker and never log "0 pairs" / "trading dead". Liveness = `bitflow_get_swap_targets` / `bitflow_get_tokens` returning a non-empty list.
-
-1. Skip entirely if sBTC balance < 50,000 sats (after Phase 4.5a bounty reserve) — preserve runway for inbox sends and gas. Use `sbtc_get_balance` (wallet-gated; skip via Phase 0.5 circuit breaker if needed).
-2. Call `bitflow_get_swap_targets(tokenId="token-sbtc")` to enumerate valid sBTC swap targets (~80). If it returns a non-empty `targets` list, the lane is healthy. Only if it returns empty (true outage), log `notable: "bitflow swap-targets empty"` and skip the rest.
-3. Pick one candidate target per run (rotate; prefer liquid stables like `token-aeusdc` / `token-usdh` and majors like `token-stx`). Call `bitflow_get_quote(tokenX="token-sbtc", tokenY="<target>", amountIn="0.0001", amountUnit="human")`. Read `quote.route`, `quote.priceImpact.severity`, and `quote.priceImpact.combinedImpactPct`.
-4. **Default action: log the quote, do NOT trade.** Trading without an operator-approved strategy is gambling. Log a benign observe line, e.g. `trade: "quote sbtc->aeusdc impact=0.01% (observe)"`.
-5. **Trade gate (only fires when ALL conditions met)**:
-   - State has `tradingStrategy.active == true` and `tradingStrategy.allowedPairs` includes the pair (operator sets this manually — no auto-trades without it).
-   - `quote.priceImpact.severity == "low"` AND `combinedImpactPct <= tradingStrategy.maxSlippageBps/100` (the quote already includes route + impact; no separate mid-price lookup needed).
-   - `totalSwapsToday < tradingStrategy.maxDailySwaps` (default 1 if unset).
-   - Wallet circuit breaker (Phase 0.5) is clear.
-6. On trade execution: call `bitflow_swap` with `postConditionMode: "deny"` and per-token post-conditions. PATCH `tradingState.lastTradeAt`, `lastTradeTxid`, `totalSwapsToday += 1`. Log `trade: "swap <amountIn> <tokenX> -> <tokenY> tx=<txid>"`.
-7. Until operator sets `tradingStrategy.active = true`, this lane is observation-only. The plumbing is here so the strategy switch is a single state PATCH when ready.
-
-**Lane priority is 1:1**: each lane runs each turn; neither blocks the other. Both lanes self-skip cheaply when there's no action to take.
 
 ### Phase 5: Code work (conditional)
 
@@ -790,7 +765,7 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
 
 The BFF Skills Competition ended 2026-04-26 (Day 30). The full submission flow stays archived in `automation-prompts/bff-skills-playbook.md` — do NOT delete it; round-2 has been mentioned and the playbook is the fast-restart path.
 
-Bounty hunting moved to Phase 4.5a (runs every turn, separate state machine). Phase 5 is now reserved for BFF skill builds and bounties that require multi-day build/review cycles (e.g., the 5000-sat multi-token x402 endpoint bounty — too big for a single 4.5a run).
+Bounty hunting moved to Phase 4.5 (runs every turn, separate state machine). Phase 5 is now reserved for BFF skill builds and bounties that require multi-day build/review cycles (e.g., the 5000-sat multi-token x402 endpoint bounty — too big for a single Phase 4.5 run).
 
 **Stale-codeWork sweep.** Before doing anything else: if `codeWork.status` is `submitted` AND `lastActionAt > 7d ago` AND the upstream PR is closed/merged AND the BFF round-2 watch (below) is still false, reset to `status: "none"`, `blockedReason: "bff-contest-ended"`, log `code: "cleared-stale <prNumber>"`. The hodlmm-compound PR #563 is the canonical example.
 
@@ -809,7 +784,7 @@ curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/Bi
 
 PATCH state `lastBffCheck: <iso>` and `bffRoundActive: true|false` based on findings. If `bffRoundActive` flips to true, log `notable: "BFF round 2 detected — restore bff-skills-playbook flow"` and follow `automation-prompts/bff-skills-playbook.md` for the rebuild path.
 
-**If `codeWork.status` is `none` and `bffRoundActive` is `false`**: skip Phase 5 entirely. Bounty hunting is in 4.5a.
+**If `codeWork.status` is `none` and `bffRoundActive` is `false`**: skip Phase 5 entirely. Bounty hunting is in Phase 4.5.
 
 **If `codeWork.status` is `none` and `bffRoundActive` is `true`**: follow `bff-skills-playbook.md` to pick a skill (Tier 1 first), set `status: "building"`, proceed to 5b.
 

@@ -5,6 +5,7 @@
 - [Wallet signing](memory/wallet-signing.md) — BIP-137/BIP-322 and Stacks RSV patterns
 - [Inbox durability](memory/inbox-durability.md) — Never drop queued items, block missing-sender-BTC instead
 - [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
+- [news_leaderboard token overflow](memory/news-leaderboard-token-overflow.md) — tool returns ~625K chars and errors every call; removed from loop, crowding check derives from news_list_signals
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection rate over 100 signals; per-beat clusters, top-domain analysis; bitcoin-macro is primary beat
 - [Auto-mode classifier blocks HTTP writes in local tasks](memory/cf-asn-block-write-ops.md) — Claude Code classifier blocks ALL curl/urllib POST/PATCH/PUT in scheduled local tasks; MCP tools bypass this; remote runs write fine; local tasks are effectively read-only+MCP
