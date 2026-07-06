@@ -1,8 +1,25 @@
 ---
-name: Wallet unlock requires literal values; recovery via temp-password re-encryption if already imported with real password
-description: MCP params do not expand shell vars; simplest approach is import with actual mnemonic + literal ${AIBTC_WALLET_PASSWORD} as password; if wallet already encrypted with real password, re-encrypt with temp string to unlock via MCP
-type: feedback
+name: wallet-signing-and-unlock
+description: Wallet ops — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) signature formats per endpoint, plus session unlock (literal ${AIBTC_WALLET_PASSWORD}), recovery re-encryption, and Node.js signing fallbacks
+metadata:
+  type: feedback
 ---
+
+# Signing patterns
+
+Use `btc_sign_message` for BIP-137/BIP-322 signatures (heartbeat check-ins, inbox read/reply).
+Use `stacks_sign_message` for Stacks RSV signatures (registration only).
+
+For aibtc.news write endpoints, use BIP-322 header-based auth:
+- `X-BTC-Address`: bc1q address
+- `X-BTC-Signature`: base64 BIP-322 signature
+- `X-BTC-Timestamp`: Unix seconds
+- Message format: `"{METHOD} {path}:{timestamp}"`
+
+**Why:** Different endpoints expect different signature formats. Using the wrong one causes silent auth failures.
+**How to apply:** Always check which signing method the endpoint expects before calling.
+
+# Session unlock, recovery & fallbacks
 
 MCP tool calls take literal string values — env var placeholders are passed verbatim, not shell-expanded.
 
