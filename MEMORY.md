@@ -26,3 +26,5 @@
 - [Identity service extended outage](memory/identity-service-extended-outage.md) — IDENTITY_SERVICE_UNAVAILABLE 503 persists days (not hours); increment pendingSignal attempts and skip
 - [Bitflow ticker endpoint is empty](memory/bitflow-ticker-empty.md) — bitflow_get_ticker returns 0 pairs upstream (not a trading outage); use get_swap_targets/get_quote with tokenX/tokenY/amountIn/amountUnit
 - [CF-1010 outbox block](memory/feedback_cf1010_remote_block.md) — Cloudflare CF-1010 blocks POST to aibtc.com outbox on both local and remote; MCP send_inbox_message bypasses it; keep pendingReplyIds in state for retry
+- [Bounty expiry headroom miss](memory/bounty-expiry-headroom-miss.md) — a drafted bounty had only ~2h left despite the >24h filter; diff expiresAt vs now explicitly; skip media/editorial-placement bounties outright
+- [State API curl IPv6 no-route](memory/state-api-curl-ipv6-noroute.md) — curl resolver sometimes returns IPv6-only AAAA with no route for the state API host even though system DNS has A records; fix with `curl --resolve host:443:<ip-from-nslookup>`
