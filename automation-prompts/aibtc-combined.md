@@ -76,7 +76,7 @@ Procedure (v1.55.0+):
    After the script prints `step: rotate, ok: true`: retry step 3 (`wallet_unlock` with the literal `${AIBTC_WALLET_PASSWORD}`) — it will now succeed. **Never** `echo $AIBTC_WALLET_PASSWORD` — the credential-leakage classifier blocks it and you waste a turn. Subprocess env-inheritance is the sanctioned path.
 6. **On any unlock failure that isn't recoverable in one pass**: PATCH state `walletUnlockFailStreak: prev+1`, log `notable: "wallet-unlock-failed attempt=N"`, and skip all wallet-gated phases this run (news file, corrections, paid inbox, bounty submit). Read-only phases still run.
 
-Read-only tools (`news_check_status`, `news_list_signals`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bounty_get`, `bounty_submissions`, `yield_dashboard_overview` with no wallet) do not require the unlock preamble — call them directly.
+Read-only tools (`news_check_status`, `news_list_signals`, `news_list_beats`, `identity_get`, balance reads, `bounty_list`, `bounty_get`, `bounty_my_submissions` (pass `btc_address` explicitly — with the wallet locked it can't derive the address and errors `No wallet available`), `yield_dashboard_overview` with no wallet) do not require the unlock preamble — call them directly.
 
 ## Workflow
 
