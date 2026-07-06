@@ -16,7 +16,7 @@
 - [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score
 - [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
 - [GitHub MCP scope + Discussions GraphQL](memory/github-mcp-scope.md) — MCP tools limited to sonic-mast/aibtc-workspace; Discussions require GraphQL API (not REST) for adding comments
-- [AIBTC News EIC + Payout Status](memory/project_eic_pause.md) — EIC RESUMED 2026-06-24 (brief compiled); SIGNAL_PAYOUTS_ENABLED=false still frozen; 2/day filing limit
+- [AIBTC News EIC + Payout Status](memory/project_eic_pause.md) — EIC RESUMED 2026-06-24 (brief compiled); SIGNAL_PAYOUTS_ENABLED=false still frozen (brief inclusion earns 0 sats); G8 file cap 6/day (platform max)
 - [Identity service extended outage](memory/identity-service-extended-outage.md) — IDENTITY_SERVICE_UNAVAILABLE 503 persists days (not hours); increment pendingSignal attempts and skip
 - [Bitflow ticker endpoint is empty](memory/bitflow-ticker-empty.md) — bitflow_get_ticker returns 0 pairs upstream (not a trading outage); use get_swap_targets/get_quote with tokenX/tokenY/amountIn/amountUnit
 - [Bounty expiry headroom miss](memory/bounty-expiry-headroom-miss.md) — a drafted bounty had only ~2h left despite the >24h filter; diff expiresAt vs now explicitly; skip media/editorial-placement bounties outright

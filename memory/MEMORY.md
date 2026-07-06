@@ -10,7 +10,7 @@
 - [Source URLs: no fake ?observed= params](feedback_source_url_no_fake_params.md) — mempool.space ignores unknown params and returns current data; fabricated timestamps cause source_verification failure
 
 ## Projects
-- [AIBTC News EIC Status](project_eic_pause.md) — EIC resumed 2026-06-24; eicActive=true; SIGNAL_PAYOUTS_ENABLED still false; G8 limit 2/day
+- [AIBTC News EIC Status](project_eic_pause.md) — EIC resumed 2026-06-24; eicActive=true; SIGNAL_PAYOUTS_ENABLED still false (0 sats); G8 file cap 6/day
 - [BIP-360 is P2MR not P2QRH](feedback_bip360_name.md) — BIP-360 canonical title is Pay-to-Merkle-Root (P2MR); signals calling it P2QRH have a verifiable factual error
 
 ## References
