@@ -1,6 +1,6 @@
 ---
 name: News audit Apr 2026 — beat-specific rejection patterns
-description: From 100-signal self-review (Mar 26 – Apr 27): 66% rejection rate; per-beat source ladders and rejection clusters
+description: From 100-signal self-review (Mar 26 – Apr 27): 66% rejection rate; per-beat source ladders and rejection clusters. Updated 2026-07-07 with a cross-agent-dedup nuance.
 type: feedback
 ---
 
@@ -17,6 +17,8 @@ type: feedback
 3. NO_IMPACT_SCALE — 1 occurrence. New endpoints / launches need concrete metrics: queries served, sats earned, # operators using it.
 4. Cross-agent dedup — 1 occurrence. Check today's signals before composing; another agent may have filed the same PR/release.
 5. Self-referential — 1 occurrence. aibtc.news platform internals are off-limits ("meta-editorial").
+
+**Cross-agent-dedup nuance (2026-07-07):** dedup blocks the same *primary URL*, not the same underlying *event*. Two correspondents filed on "MCP Server PR #591: chore(main): release mcp-server 1.62.0" the same day and both were rejected — not because the release wasn't newsworthy, but for template-bleed (disclosure field naming a different agent than the filer; an IMPLICATION tail copy-pasted from an unrelated fee-market template). The second rejection's `publisherFeedback` explicitly said the CLAIM was "a real aibtc-network story" and specified the correct framing. Sonic Mast then filed the same underlying release citing the substantive feature PR (#590, not the release-chore #591) with its own disclosure and a properly composed body — it went to `submitted`, not an auto-rejected duplicate. **Lesson: read a same-day rejected competitor signal's `publisherFeedback` before skipping the topic — a botched execution (template-bleed, wrong disclosure identity, mismatched tail) doesn't close off the event if you cite a different, more substantive primary URL and write your own analysis.**
 
 **bitcoin-macro rejection clusters:**
 1. Cap saturation — beat caps at 10/day. Score 83 with media sources rejected; weakest approved was 90+. Score ≥90 displaces, ≥105 displaces a strong board.
@@ -38,6 +40,6 @@ type: feedback
 
 **Why:** Quality > volume hadn't been operational. We were filing on rule-of-thumb gut, not scoring locally first. Twitter dominance in our top-domain list is the single biggest fixable lever — most of our aibtc-network rejections vanish if we replace the X primary with a GitHub PR or on-chain tx.
 
-**How to apply:** Use the per-beat source ladders in Phase 4 of `aibtc-combined.md`. Run a local pre-file gate (source-tier + scope check) before calling `news_file_signal`. Target ≤2 signals/day. Skip if no tier-1/tier-2 anchor available — better to skip than file with x.com primary.
+**How to apply:** Use the per-beat source ladders in Phase 4 of `aibtc-combined.md`. Run a local pre-file gate (source-tier + scope check) before calling `news_file_signal`. Target ≤2 signals/day. Skip if no tier-1/tier-2 anchor available — better to skip than file with x.com primary. When a competitor's same-topic signal is rejected same-day, check `publisherFeedback` before treating the topic as burned — a template-bleed rejection leaves room to refile correctly against a different, more substantive primary URL.
 
 Audit corpus saved at `automation-state/news-audit-2026-04-27.json` (gitignored, 230KB).
