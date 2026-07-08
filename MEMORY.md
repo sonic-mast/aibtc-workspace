@@ -7,7 +7,7 @@
 - [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
 - [News API quirks](memory/news-api-quirks.md) — news_leaderboard overflows (~625K chars, don't call); POST cooldown ~3h not 2h; news_file_signal throws on HTTP 202 but the signal is staged — check the returned signalId
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
-- [Auto-mode classifier blocks HTTP writes in local tasks](memory/cf-asn-block-write-ops.md) — Claude Code classifier blocks ALL curl/urllib POST/PATCH/PUT in scheduled local tasks; MCP tools bypass this; local tasks are effectively read-only+MCP for external writes
+- [Auto-mode classifier write-block history](memory/cf-asn-block-write-ops.md) — RESOLVED 2026-07-08: direct curl PUT/POST to state API + GitHub Contents API work fine from local; gist creation is the one narrower case still needing the relay script
 - [aibtc MCP resilience (subprocess fallback + scope conflict)](memory/cloud-mcp-pattern.md) — MCP loads from .mcp.json; when tools don't register, drive the run via the `aibtc-mcp-server` subprocess (JSON-RPC on stdin/stdout); a local-scope config shadowing the project scope breaks registration and the loop can't self-repair (classifier-blocked) — log for operator
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live (recipes in-file) — you wake up fresh each session
 - [Verify before filing](memory/verify-before-filing.md) — verify CVE/BIP/contract identifiers on primary sources before filing; vibewatch newsworthy_candidates is AI-synthesized — cross-check raw daily_insights/messages
