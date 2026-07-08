@@ -1,24 +1,41 @@
-# MEMORY.md
+## User
+- [Brandon (operator)](user_brandon.md) — @marshallmixing, technically proficient, prefers terse responses
 
-## Operational Learnings
+## Feedback
+- [Commit and push promptly](feedback_commit_push.md) — Push cloud-affecting changes immediately after verifying
+- [Memory-prune gotcha](aibtc-memory-prune-gotcha.md) — pruning root MEMORY.md also needs prompt + secondary-index link fixes; prefer merges over deletes; loop can't self-merge
+- [Never fabricate contracts/URLs](feedback_no_fabrication.md) — PR #225 rejected for hallucinated addresses, verify on-chain first
+- [Disclosure is separate from body](feedback_disclosure_separate.md) — News signal disclosure field only, never in body text
+- [Sync fork before branching](feedback_sync_fork.md) — Stale closed-PR files leak into diff without upstream sync
+- [News status vs POST rate limit decoupled](feedback_news_api_status_decoupled.md) — canFileSignal=true doesn't guarantee POST success; handle 429 and cache
+- [Outbox field is "reply" not "content"](feedback_outbox_field.md) — POST /api/outbox uses "reply" field, not "content"; prompt template is stale
+- [Inbox field names are stale in prompt](feedback_inbox_field_names.md) — Use messageId/fromAddress/peerBtcAddress; not id/senderAddress/senderBtcAddress
+- [Quantum governance signals always rejected](feedback_quantum_governance_signals.md) — Only file quantum on hardware milestones, formal BIP stage changes, or arXiv papers; not governance debates
+- [Quantum hardware must be shipping, not projected](feedback_quantum_hardware_vs_projection.md) — "X qubits needed to crack Bitcoin" is a projection; only file on actual vendor hardware announcements
+- [Twitter-only sources cause rejection](feedback_twitter_source_insufficient.md) — All beats require at least one non-Twitter primary source (GitHub, on-chain tx, API, arxiv/IACR)
+- [Quantum Google-derivative rejection](feedback_quantum_google_derivative.md) — Quantum editor blocks Google quantum paper coverage if already filed by another agent; 7-gate + 4-cluster cap applies
+- [Cross-agent PR dedup](feedback_cross_agent_dedup.md) — Editors reject signals when another agent already covered the same GitHub PR same day; check all today's signals first
+- [bitcoin-macro EDGAR anchor required](feedback_bitcoin_macro_edgar_anchor.md) — Institutional signals score 60-83 with media sources; need SEC EDGAR filing URL as primary to score ≥90
+- [CF-1010 ASN block on remote writes](feedback_cf1010_remote_block.md) — Remote runner's ASN blocked by Cloudflare for POST ops to aibtc.com; reads work, writes fail; let local run retry
+- [Encourage Discussions participation](feedback_discussions_participation.md) — Sweep aibtcdev/agent-news Discussions each run; reply > post
+- [News telemetry lanes score 93-100](news_telemetry_lanes.md) — Structural-telemetry primaries beat SEC 8-K + media; pivot landed in combined.md May 2026
+- [aibtc MCP runs binary directly](feedback_mcp_no_npx.md) — .mcp.json calls aibtc-mcp-server directly; npx @latest caused tools-not-registered race in remote sessions
+- [Gist publishing: classifier judges publish-intent](automode-classifier-gist.md) — broad Bash(curl *) doesn't cover POST /gists; fixed 2026-06-18 with SPECIFIC rule Bash(bash scripts/publish-gist.sh:*); relay-worker fallback if still blocked; phantom bountyHistory risk — reconcile vs bounty_my_submissions
+- [Correction dedup across runs](feedback_correction_dedup.md) — Track filed signalIds in `correctionsFiled-YYYY-MM-DD` KV; biggest efficiency drain on the loop
+- [pending_payment blocks new signal filings](feedback_pending_payment_blocks_signal.md) — Cross-beat block: pending_payment on ANY beat blocks ALL new filings from the BTC address
+- [Wallet unlock: literal-string approach](feedback_wallet_unlock_literal.md) — MCP params don't shell-expand; encrypt+unlock with literal `${AIBTC_WALLET_PASSWORD}`; Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
+- [Testnet runs locally, no mnemonic](feedback_testnet_mcp.md) — BadAddressVersionByte was a mainnet-pinned wallet record, NOT a network limit; testnet works locally via `scripts/testnet-call.py` (export→import network=testnet); no AIBTC_MNEMONIC, no remote run
+- [Loop changes land on the main checkout](loop-changes-land-on-main-checkout.md) — worktree edits don't affect the loop; direct main-push is classifier-blocked; ship via PR then `git pull` in /Users/.../Documents/Coding/AIBTC/
 
-- [Wallet signing + unlock](memory/wallet-signing-and-unlock.md) — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) per endpoint; unlock with literal `${AIBTC_WALLET_PASSWORD}` (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
-- [Inbox handling](memory/inbox-handling.md) — never drop queued items (block missing-sender-BTC); API returns messageId/fromAddress/peerBtcAddress and outbox uses `reply` not `content`
-- [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
-- [News API quirks](memory/news-api-quirks.md) — news_leaderboard overflows (~625K chars, don't call); POST cooldown ~3h not 2h; news_file_signal throws on HTTP 202 but the signal is staged — check the returned signalId
-- [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
-- [Auto-mode classifier write-block history](memory/cf-asn-block-write-ops.md) — RESOLVED 2026-07-08: direct curl PUT/POST to state API + GitHub Contents API work fine from local; gist creation is the one narrower case still needing the relay script
-- [aibtc MCP resilience (subprocess fallback + scope conflict)](memory/cloud-mcp-pattern.md) — MCP loads from .mcp.json; when tools don't register, drive the run via the `aibtc-mcp-server` subprocess (JSON-RPC on stdin/stdout); a local-scope config shadowing the project scope breaks registration and the loop can't self-repair (classifier-blocked) — log for operator
-- [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live (recipes in-file) — you wake up fresh each session
-- [Verify before filing](memory/verify-before-filing.md) — verify CVE/BIP/contract identifiers on primary sources before filing; vibewatch newsworthy_candidates is AI-synthesized — cross-check raw daily_insights/messages
-- [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection over 100 signals; per-beat source ladders + rejection clusters; the prompt's Phase 4 filing gates cite this as rationale
-- [arXiv MCP wrong categories](memory/arxiv-permission-denied.md) — arxiv_search only covers cs.AI/cs.LG/cs.CL/cs.MA; skip for quantum — use export.arxiv.org API or Brave Search site:arxiv.org instead
-- [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score
-- [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
-- [GitHub MCP scope + Discussions GraphQL](memory/github-mcp-scope.md) — MCP tools limited to sonic-mast/aibtc-workspace; Discussions require GraphQL API (not REST) for adding comments
-- [AIBTC News EIC + Payout Status](memory/project_eic_pause.md) — EIC RESUMED 2026-06-24 (brief compiled); SIGNAL_PAYOUTS_ENABLED=false still frozen (brief inclusion earns 0 sats); G8 file cap 6/day (platform max)
-- [Identity service extended outage](memory/identity-service-extended-outage.md) — IDENTITY_SERVICE_UNAVAILABLE 503 persists days (not hours); increment pendingSignal attempts and skip
-- [Bitflow ticker endpoint is empty](memory/bitflow-ticker-empty.md) — bitflow_get_ticker returns 0 pairs upstream (not a trading outage); use get_swap_targets/get_quote with tokenX/tokenY/amountIn/amountUnit
-- [Bounty expiry headroom miss](memory/bounty-expiry-headroom-miss.md) — a drafted bounty had only ~2h left despite the >24h filter; diff expiresAt vs now explicitly; skip media/editorial-placement bounties outright
-- [State API curl IPv6 no-route](memory/state-api-curl-ipv6-noroute.md) — curl resolver returns IPv6-only AAAA with no route for the state API host though system DNS has A records; try `curl -4` first, fall back to `nslookup` + `curl --resolve host:443:<ip>` (the verified fix) if `-4` gives exit 6
-- [Bounty audit fix-PR feasibility](memory/bounty-audit-fix-pr-infeasible.md) — Zest F-01 fix is PR #58 (open, awaiting merge); Bitflow/ALEX are dead ends; inference-provider bounty needs real hosted infra, not a code-PR
+## Projects
+- [Dual stacking: enrolled but needs deployment](project_dual_stacking_enrolled.md) — sBTC must be DEPLOYED in based-dollar/bitflow/granite/velar/zest to earn; wallet-hold doesn't count; AGENT.md is misleading; do not re-enroll (ERR_ALREADY_ENROLLED)
+- [BFF Skills Competition](project_bff_skills.md) — $100/day, WRITE skills, two-stage PR flow with Devin+Gemini review
+- [AIBTC News EIC Status](project_eic_pause.md) — EIC ACTIVE, 6/day limit; SIGNAL_PAYOUTS_ENABLED=false; payout backlog deprecated 2026-07-08, no retroactive settlement
+- [BIP-360 is P2MR not P2QRH](feedback_bip360_name.md) — BIP-360 canonical title is Pay-to-Merkle-Root (P2MR); signals calling it P2QRH have a verifiable factual error
+
+## References
+- [State API](reference_state_api.md) — Cloudflare Worker KV at sonic-mast-state.brandonmarshall.workers.dev
+- [Remote trigger DISABLED](reference_trigger.md) — aibtc-combined remote trigger disabled 2026-06-07; loop is local-only (`aibtc-combined-local`, hourly). Only daily-digest still runs remotely.
+- [News scoring dimensions](news_scoring_dimensions.md) — rejection taxonomy from Apr 2026 probe: Twitter-only 40%, out-of-beat 20%, quantum 7-gate, aibtc-network aibtcdev-scope-only
+- [Shelly is Sonic Mast](reference_shelly_is_sonic_mast.md) — GitHub author "Shelly" is the same operator/agent; attribute her commits to Sonic Mast's body of work (e.g. dual-stacking skill PR #76)
+- [Hermetica hBTC: closed beta](reference_hermetica_closed_beta.md) — 8% APY but not depositable as of 2026-05-27; Zest is the default sBTC path until Hermetica opens
