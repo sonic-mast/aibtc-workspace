@@ -190,7 +190,9 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 
 **Phase 2b.1: Discussions sweep — `aibtcdev/agent-news`**
 
-The notifications API only surfaces threads you're already subscribed to. Discussions you'd be a good fit for but haven't joined are invisible. Each run, also pull the last ~15 active Discussions and look for ones worth posting or replying to.
+The notifications API only surfaces threads you're already subscribed to. Discussions you'd be a good fit for but haven't joined are invisible. Pull the last ~15 active Discussions and look for ones worth posting or replying to.
+
+**6h gate.** Read the `lastDiscussionsSweepAt` KV key first. If it is < 6h old, skip the sweep entirely this run — notifications in 2b proper still catch direct replies hourly, so nothing urgent is lost. When the gate is open, run the sweep and PUT the current ISO timestamp to `lastDiscussionsSweepAt` afterward. (A 24h audit on 2026-07-11 showed the sweep returning the same stale Apr/May threads on 15 consecutive hourly runs.)
 
 ```bash
 curl -s -H "Authorization: token $GITHUB_TOKEN" \
@@ -357,7 +359,13 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 
 Run this block every Phase 4. The principle: compose against real data, not chatter. An Apr 2026 audit of ~100 signals showed signals were being retrofit around weak anchors after the headline was already in mind — this inverts that order. Cap each call at the smallest useful payload via `?limit=` / date filters / `python3 -c '...slice...'` to keep tokens bounded.
 
-**Bitcoin-macro inventory (every run) — TELEMETRY FIRST, SEC fallback:**
+**Split cadence (added 2026-07-11 after a 24h run audit — the full 9-call inventory was re-pulled hourly only to conclude "flat vs last filing"):**
+
+- **Every Phase 4 run:** fees + hashrate (from call group 1) and SEC EDGAR (call group 5). These are the fast-moving lanes.
+- **Every 6h** (gate via the `lastSlowMacroInventoryAt` KV key; inside the window skip these calls entirely): blocks/extras (third curl of group 1), bitnodes (2), libsecp256k1/core releases (3), Optech (4), farside (6). Releases and newsletters change at most daily — hourly pulls add nothing. PUT the ISO timestamp after a full pull.
+- **Flat-telemetry short-circuit:** after the hashrate call, compare against `lastTelemetryRead` in state (`{hashrateEHs, difficultyChangePct, readAt}`). If |hashrate delta| < 1.5% AND the difficulty-change figure moved < 0.5 points AND your last bitcoin-macro filing is < 12h old, the telemetry lane has no fresh event — do NOT compose another hashrate/difficulty story; evaluate EDGAR and aibtc-network instead. Always PATCH `lastTelemetryRead` with the fresh values, every run.
+
+**Bitcoin-macro inventory — TELEMETRY FIRST, SEC fallback (cadence per the split above):**
 ```bash
 # 1. mempool.space — fees, hashrate, block-depth telemetry (PRIMARY: this is the 93+ scoring lane)
 curl -s "https://mempool.space/api/v1/fees/recommended"
@@ -379,6 +387,8 @@ curl -s "https://farside.co.uk/wp-json/wp/v2/pages?slug=bitcoin-etf-flow-all-dat
 ```
 
 **Aibtc-network inventory (every run if bitcoin-macro yields nothing):**
+
+**Quiet-org short-circuit:** run call 7 (org repos, sorted by pushed) FIRST. If no repo's `pushed_at` is newer than the `aibtcNewestPushAt` value in state, nothing changed in the org — skip calls 6, 8 and 9 and treat the beat as event-less this run. Always PATCH `aibtcNewestPushAt` with the newest `pushed_at` seen.
 ```bash
 # (The BFF Skills competition ended 2026-04-26 (Day 30) — see Phase 5's round-2 watch; aibtcdev/bff-skills-comp and BitflowFinance/bff-skills are both 404 now. aibtcdev artifact activity is covered by the org-wide + release pulls below.)
 # 6. tx-schemas / x402-sponsor-relay releases (version bumps with measured behavioral changes)
@@ -591,6 +601,8 @@ State shape (PATCH state to maintain across runs):
 
 Process this lane in two parts each run: (A) **advance one in-flight bounty by one step** (round-robin, oldest `lastActionAt` first so none starves), then (B) **top up the pipeline** if there's a free slot. At most one state-advancing action (one build/submit) per run — carrying 3 bounties does not mean doing 3 builds in a run.
 
+**Poll gate (6h) — before Part A.** If EVERY in-flight entry is watch-only — status `submitted`, or `building` with a `blockedReason` that waits on an external party (e.g. `awaiting-merge`, `awaiting-disclosure`) — then the reconcile/monitor pass below is pure polling. Gate it: read `lastBountyPollAt` from state; if < 6h old AND no entry's `expiresAt` is within 48h, skip Part A entirely and log `bounty: "poll-gated"`. When the gate opens, do the pass and PATCH `lastBountyPollAt: <iso>`. Entries with an actionable local step (`drafted`, or `building` with no external block) are NOT gated — advance them every run as before. (A 24h audit on 2026-07-11 showed 15 consecutive hourly `bounty_get` sweeps over the same 3 stalled bounties with zero state changes; noticing a settled bounty 5h late costs nothing.)
+
 **A. Advance one in-flight bounty (the oldest non-terminal entry that has a pending step):**
 
 **First, reconcile against the platform** (cheap, read-only). For the entry you're about to advance, call `bounty_get(bounty_id)` and check the on-platform `status`. If it's terminal — `paid`, `closed`, `expired`, or `winner-announced` / `acceptedAt` set to a submission that isn't ours — drop it from `bounties` now and log `bounty: "closed <id> (settled on-platform)"`; do not build or submit. Also drop any entry whose `bountyId` is a dead `mq`/`mqf`-prefix string (deprecated API — `bounty_get` 404s). This catches the failure mode where a `drafted`/`building` bounty was won by another agent while we sat on it (e.g. the Legion v3.0 testnet bounty paid to TinyOps on 2026-06-23 while ours stayed blocked).
@@ -698,11 +710,14 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
 
 **Never blocks shipping.** Every failure mode (no key, API error, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
 
+The review rubric lives in the workspace's `REVIEW.md` (severity definitions, always-check list, nit cap) — it is piped into the Gemini call as system context so the gate, PR bots, and human reviewers share one calibration.
+
 1. If `$GEMINI_API_KEY` is empty: set `localReviewResult="no-key"` and return (push proceeds without review).
-2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files). **Export** `DIFF` so the Python heredoc (a child process) can read it via `os.environ`:
+2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files). **Export** `DIFF` and `REVIEW_MD` so the Python heredoc (a child process) can read them via `os.environ`:
    ```bash
    git add -N skills/{skill-name}/ 2>/dev/null
    export DIFF="$(git diff --no-color HEAD -- skills/{skill-name}/)"
+   export REVIEW_MD="$(cat /Users/brandonmarshall-personal/Documents/Coding/AIBTC/REVIEW.md 2>/dev/null)"
    ```
 3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
 4. Call Gemini with structured output. **Up to 2 total review rounds per gate invocation**: round 1 is the initial review; if it finds bugs, apply fixes and run round 2 as a confirmation pass. If round 2 still finds bugs, stop. Round counter starts at 1. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome. `GEMINI_API_KEY` must already be exported in the session (it's in `.env`; the combined-task runner sources it at startup). If in doubt, `export GEMINI_API_KEY` before the call.
@@ -710,9 +725,11 @@ Runs from 5b (before initial push) and 5d (before fix push). Acts as a replaceme
    REVIEW=$(python3 <<'PY'
    import json, os, sys, urllib.request
    diff = os.environ["DIFF"]
+   review_md = os.environ.get("REVIEW_MD", "")
    payload = {
      "contents": [{"parts": [{"text": diff}]}],
      "systemInstruction": {"parts": [{"text":
+       (review_md + "\n\n" if review_md else "") +
        "You are reviewing a BFF skills PR for AIBTC. Focus ONLY on these failure modes — skip style/nitpicks:\n"
        "1. Fabricated contract addresses or API URLs (cite the address and why it looks unverified).\n"
        "2. Safety claims in AGENT.md not enforced in the .ts code.\n"

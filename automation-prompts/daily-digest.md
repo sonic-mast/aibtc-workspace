@@ -30,17 +30,16 @@ curl -sf "https://sonic-mast-state.brandonmarshall.workers.dev/kv/digest-acked-c
 
 If the run log key is empty or missing, send: "No runs logged for {date}." and exit.
 
-`digest-acked-conditions` is a JSON map of chronic condition keys you've already told the operator about, e.g. `{"eic-paused": {"reportedAt": "..."}, "bitflow-ticker-empty": {"reportedAt": "..."}}`. If the key is missing, treat it as `{}`.
+`digest-acked-conditions` is a JSON map of chronic condition keys you've already told the operator about, e.g. `{"eic-paused": {"reportedAt": "..."}}`. If the key is missing, treat it as `{}`.
 
 ### 2. Compose the digest
 
 Scan all run entries and extract what matters. **Filter aggressively** — the operator does not want noise.
 
-**Lead with the active earning lanes.** While EIC is paused, news is NOT the primary lane — bounties and Bitflow trading are. Open the recap with bounty pipeline state (how many in flight, and any drafted / building / submitted / won) and notable trading observations. Treat capped-news and idle news runs as expected background, not the headline.
+**Lead with the active earning lane.** While signal payouts are frozen, news is NOT the primary lane — bounties are. (Bitflow trading was removed from the loop 2026-07-05; there is no trading lane and no trading fields to expect in run logs.) Open the recap with bounty pipeline state (how many in flight, and any drafted / building / submitted / won). Treat capped-news and idle news runs as expected background, not the headline.
 
 **Always include:**
 - Bounty pipeline: count in flight, plus any new draft, submission, win, or stale-drop (from `bounty:` / `notable` run-log fields)
-- Trading: any executed swap; otherwise a one-line note that the lane is observing (don't list every quote)
 - Signals filed: beat, headline, and whether approved/rejected/pending
 - Rejection reasons (group by reason if multiple)
 - PR status changes (new PR, review round, approved, merged)
@@ -55,20 +54,18 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 
 **Known chronic conditions — acknowledge once, then suppress.** Some conditions are persistent and already known to the operator. For each, report it ONLY when it first appears or its status changes; otherwise omit it entirely. Track them in the `digest-acked-conditions` KV map:
 - `eic-paused` — EIC funding paused (news earns $0, 1/day cap). Already acknowledged; mention only if EIC *resumes* (look for `notable: "EIC resumed..."`).
-- `news-capped-daily` — news hit its daily cap. Expected under EIC pause; suppress.
-- `bitflow-ticker-empty` — the `bitflow_get_ticker` endpoint returns 0 pairs. This is a known-broken upstream endpoint, NOT a trading outage. Suppress. Only surface Bitflow if `bitflow swap-targets empty` appears in `notable` (the real outage signal).
+- `news-capped-daily` — news hit its daily cap. Expected while payouts are frozen; suppress.
 
-For any condition you DO report (first sighting or a status change), PATCH `digest-acked-conditions` to record it: `curl -sf -X PATCH ".../kv/digest-acked-conditions" -H "Authorization: Bearer $STATE_API_TOKEN" -d '{"<key>":{"reportedAt":"<iso>","state":"<active|resolved>"}}'`. When a condition resolves (e.g. EIC resumes, Bitflow recovers), report the change and update its entry.
+For any condition you DO report (first sighting or a status change), PATCH `digest-acked-conditions` to record it: `curl -sf -X PATCH ".../kv/digest-acked-conditions" -H "Authorization: Bearer $STATE_API_TOKEN" -d '{"<key>":{"reportedAt":"<iso>","state":"<active|resolved>"}}'`. When a condition resolves (e.g. payouts unfreeze), report the change and update its entry.
 
 **After summarizing, diagnose and recommend NEW or worsening problems only.** Look for:
 - Recurring rejection patterns (same reason 2+ times = something to fix in the prompt or strategy)
 - Stale PRs / stale bounties (review or build rounds stacking up with no progress)
 - Bounty lane starvation (pipeline empty for the whole day despite open, fit-score ≥3 bounties on `bounty_list`)
 - Anything that's getting worse compared to the prior day
-- A real `bitflow swap-targets empty` outage (not the ticker)
 - **BFF #544 winner mention**: if any run-log entry's `notable` mentions a `DAY {N} Winner: PR #544` line from agents.txt, lead with it.
 
-**Do NOT recommend reducing the trigger frequency.** Idle news runs are expected while EIC is paused — the loop's job has shifted to bounties and trading, which need the runs. If the loop looks idle, the fix is more bounty/trading throughput, not fewer runs.
+**Do NOT recommend reducing the trigger frequency.** Idle news runs are expected while payouts are frozen — the loop's job has shifted to bounties, which need the runs. If the loop looks idle, the fix is more bounty throughput, not fewer runs.
 
 **Do NOT recommend remote-environment fixes.** The combined loop is local-only (remote trigger disabled 2026-06-07). Never surface "needs a remote run", "set `AIBTC_MNEMONIC` in the remote env", or similar as an action item — there is no remote combined run. Testnet contract work runs locally via `scripts/testnet-call.py`. If a run-log `blockedReason` says `requires-remote-*`, treat it as a stale/buggy state to flag for fixing, not as a real operator action.
 

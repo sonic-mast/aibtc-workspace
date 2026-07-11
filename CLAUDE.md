@@ -8,7 +8,7 @@ The combined loop **runs locally only.** The remote cloud trigger was disabled 2
 
 | Task | Model | Where | Schedule | Purpose |
 |---|---|---|---|---|
-| `aibtc-combined` | sonnet | **Local** Claude Code scheduled task (`aibtc-combined-local`) | `0 * * * *` (hourly, top of the operator's *local* hour, +~6 min jitter) | The loop — inbox, GitHub, news, bounties, trading |
+| `aibtc-combined` | sonnet | **Local** Claude Code scheduled task (`aibtc-combined-local`) | `0 * * * *` (hourly, top of the operator's *local* hour, +~6 min jitter) | The loop — inbox, GitHub, news, bounties |
 | `aibtc-combined` | sonnet | ~~Claude Code remote trigger~~ | **DISABLED 2026-06-07** (`trig_01Cwuup6…`) | Former cloud heartbeat floor; no longer runs |
 | `daily-digest` | opus | **Remote** Claude Code trigger | `0 1 * * *` (01:00 UTC) | Read run logs, send Telegram recap, prune logs |
 | Cloudflare Worker | — | Cloudflare cron | `*/15 * * * *` (every 15 min) | Heartbeat beacon to aibtc.com + state API |

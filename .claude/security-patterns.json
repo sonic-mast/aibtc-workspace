@@ -1,0 +1,94 @@
+{
+  "patterns": [
+    {
+      "rule_name": "github_token_literal",
+      "regex": "\\bgh[pousr]_[A-Za-z0-9]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}",
+      "blocking": true,
+      "reminder": "Literal GitHub token in content. Reference $GITHUB_TOKEN from the environment instead — a committed token gets revoked and burns Sonic Mast's account."
+    },
+    {
+      "rule_name": "cloudflare_token_literal",
+      "regex": "\\bcfat_[A-Za-z0-9]{20,}",
+      "blocking": true,
+      "reminder": "Literal Cloudflare API token. Use $CLOUDFLARE_API_TOKEN from the environment; never write the value into a file."
+    },
+    {
+      "rule_name": "x402_key_literal",
+      "regex": "\\bx402_sk_[A-Za-z0-9_]{10,}",
+      "blocking": true,
+      "reminder": "Literal x402 secret key. Keep it in the environment / credentials store, never in a file."
+    },
+    {
+      "rule_name": "google_api_key_literal",
+      "regex": "\\bAIza[0-9A-Za-z_-]{30,}",
+      "blocking": true,
+      "reminder": "Literal Google API key (GEMINI_API_KEY?). Reference the env var; never commit the value."
+    },
+    {
+      "rule_name": "telegram_bot_token_literal",
+      "regex": "\\b\\d{8,10}:AA[A-Za-z0-9_-]{30,}\\b",
+      "blocking": true,
+      "reminder": "Literal Telegram bot token. Use $TELEGRAM_BOT_TOKEN; a committed token lets anyone impersonate the digest bot."
+    },
+    {
+      "rule_name": "mnemonic_literal",
+      "regex": "(?i)mnemonic[\"']?\\s*[:=]\\s*[\"'][a-z]+( [a-z]+){11,23}[\"']",
+      "blocking": true,
+      "reminder": "That looks like a wallet seed phrase being written to a file. The mnemonic must never leave the wallet keystore — it is recoverable via wallet_export when needed."
+    },
+    {
+      "rule_name": "generic_secret_assignment",
+      "regex": "(?i)\\b(api[_-]?key|access[_-]?token|password|client[_-]?secret)\\b[\"']?\\s*[:=]\\s*[\"'](?!\\$)[A-Za-z0-9+/=_-]{20,}[\"']",
+      "reminder": "Looks like a literal credential assignment. Use an env-var reference (e.g. \"$STATE_API_TOKEN\") instead of the raw value."
+    },
+    {
+      "rule_name": "bare_fetch_no_timeout",
+      "regex": "(?<!async )\\bfetch\\s*\\(",
+      "must_not_match": "AbortSignal\\.timeout",
+      "paths": [
+        "scripts/**",
+        "workers/**",
+        "bounties/**",
+        "**/*.ts",
+        "**/*.mjs"
+      ],
+      "reminder": "Every fetch() needs AbortSignal.timeout(10_000) — bare fetch hangs the loop on a dead endpoint (REVIEW.md check 5)."
+    },
+    {
+      "rule_name": "contract_call_no_postconditions",
+      "regex": "makeContractCall|callContract\\(|call_contract\\(",
+      "must_not_match": "postConditionMode|post_condition_mode",
+      "paths": [
+        "scripts/**",
+        "workers/**",
+        "bounties/**",
+        "**/*.ts",
+        "**/*.mjs",
+        "**/*.py"
+      ],
+      "reminder": "Contract calls must set postConditionMode deny + per-token post-conditions (REVIEW.md check 3). Without deny mode, post-conditions are advisory only."
+    },
+    {
+      "rule_name": "stacks_contract_address_verify",
+      "regex": "\\bS[PM][0-9A-Z]{28,41}\\.[a-z][a-z0-9-]+",
+      "paths": [
+        "scripts/**",
+        "workers/**",
+        "bounties/**",
+        "**/*.ts",
+        "**/*.mjs",
+        "**/*.py"
+      ],
+      "reminder": "Contract principal detected — verify it exists on-chain (api.hiro.so/extended/v1/contract/{address}.{name}) before shipping. Fabricated addresses got PR #225 rejected (REVIEW.md check 1)."
+    },
+    {
+      "rule_name": "subprocess_shell_true",
+      "regex": "subprocess\\.(run|call|Popen|check_output|check_call)\\([^)]*shell\\s*=\\s*True",
+      "paths": [
+        "scripts/**",
+        "**/*.py"
+      ],
+      "reminder": "shell=True in subprocess is a command-injection vector. Pass argv as a list and skip the shell."
+    }
+  ]
+}
