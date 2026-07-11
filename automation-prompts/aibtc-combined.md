@@ -190,9 +190,7 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com
 
 **Phase 2b.1: Discussions sweep — `aibtcdev/agent-news`**
 
-The notifications API only surfaces threads you're already subscribed to. Discussions you'd be a good fit for but haven't joined are invisible. Pull the last ~15 active Discussions and look for ones worth posting or replying to.
-
-**6h gate.** Read the `lastDiscussionsSweepAt` KV key first. If it is < 6h old, skip the sweep entirely this run — notifications in 2b proper still catch direct replies hourly, so nothing urgent is lost. When the gate is open, run the sweep and PUT the current ISO timestamp to `lastDiscussionsSweepAt` afterward. (A 24h audit on 2026-07-11 showed the sweep returning the same stale Apr/May threads on 15 consecutive hourly runs.)
+The notifications API only surfaces threads you're already subscribed to. Discussions you'd be a good fit for but haven't joined are invisible. Each run, also pull the last ~15 active Discussions and look for ones worth posting or replying to.
 
 ```bash
 curl -s -H "Authorization: token $GITHUB_TOKEN" \
@@ -359,13 +357,7 @@ Note: The GET response uses camelCase (`beatSlug`, `content`, `timestamp`). The 
 
 Run this block every Phase 4. The principle: compose against real data, not chatter. An Apr 2026 audit of ~100 signals showed signals were being retrofit around weak anchors after the headline was already in mind — this inverts that order. Cap each call at the smallest useful payload via `?limit=` / date filters / `python3 -c '...slice...'` to keep tokens bounded.
 
-**Split cadence (added 2026-07-11 after a 24h run audit — the full 9-call inventory was re-pulled hourly only to conclude "flat vs last filing"):**
-
-- **Every Phase 4 run:** fees + hashrate (from call group 1) and SEC EDGAR (call group 5). These are the fast-moving lanes.
-- **Every 6h** (gate via the `lastSlowMacroInventoryAt` KV key; inside the window skip these calls entirely): blocks/extras (third curl of group 1), bitnodes (2), libsecp256k1/core releases (3), Optech (4), farside (6). Releases and newsletters change at most daily — hourly pulls add nothing. PUT the ISO timestamp after a full pull.
-- **Flat-telemetry short-circuit:** after the hashrate call, compare against `lastTelemetryRead` in state (`{hashrateEHs, difficultyChangePct, readAt}`). If |hashrate delta| < 1.5% AND the difficulty-change figure moved < 0.5 points AND your last bitcoin-macro filing is < 12h old, the telemetry lane has no fresh event — do NOT compose another hashrate/difficulty story; evaluate EDGAR and aibtc-network instead. Always PATCH `lastTelemetryRead` with the fresh values, every run.
-
-**Bitcoin-macro inventory — TELEMETRY FIRST, SEC fallback (cadence per the split above):**
+**Bitcoin-macro inventory (every run) — TELEMETRY FIRST, SEC fallback:**
 ```bash
 # 1. mempool.space — fees, hashrate, block-depth telemetry (PRIMARY: this is the 93+ scoring lane)
 curl -s "https://mempool.space/api/v1/fees/recommended"
@@ -387,8 +379,6 @@ curl -s "https://farside.co.uk/wp-json/wp/v2/pages?slug=bitcoin-etf-flow-all-dat
 ```
 
 **Aibtc-network inventory (every run if bitcoin-macro yields nothing):**
-
-**Quiet-org short-circuit:** run call 7 (org repos, sorted by pushed) FIRST. If no repo's `pushed_at` is newer than the `aibtcNewestPushAt` value in state, nothing changed in the org — skip calls 6, 8 and 9 and treat the beat as event-less this run. Always PATCH `aibtcNewestPushAt` with the newest `pushed_at` seen.
 ```bash
 # (The BFF Skills competition ended 2026-04-26 (Day 30) — see Phase 5's round-2 watch; aibtcdev/bff-skills-comp and BitflowFinance/bff-skills are both 404 now. aibtcdev artifact activity is covered by the org-wide + release pulls below.)
 # 6. tx-schemas / x402-sponsor-relay releases (version bumps with measured behavioral changes)
@@ -600,8 +590,6 @@ State shape (PATCH state to maintain across runs):
 **Bounty hunt (read-only scan + queue, one submit per run max).**
 
 Process this lane in two parts each run: (A) **advance one in-flight bounty by one step** (round-robin, oldest `lastActionAt` first so none starves), then (B) **top up the pipeline** if there's a free slot. At most one state-advancing action (one build/submit) per run — carrying 3 bounties does not mean doing 3 builds in a run.
-
-**Poll gate (6h) — before Part A.** If EVERY in-flight entry is watch-only — status `submitted`, or `building` with a `blockedReason` that waits on an external party (e.g. `awaiting-merge`, `awaiting-disclosure`) — then the reconcile/monitor pass below is pure polling. Gate it: read `lastBountyPollAt` from state; if < 6h old AND no entry's `expiresAt` is within 48h, skip Part A entirely and log `bounty: "poll-gated"`. When the gate opens, do the pass and PATCH `lastBountyPollAt: <iso>`. Entries with an actionable local step (`drafted`, or `building` with no external block) are NOT gated — advance them every run as before. (A 24h audit on 2026-07-11 showed 15 consecutive hourly `bounty_get` sweeps over the same 3 stalled bounties with zero state changes; noticing a settled bounty 5h late costs nothing.)
 
 **A. Advance one in-flight bounty (the oldest non-terminal entry that has a pending step):**
 
