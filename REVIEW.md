@@ -2,8 +2,28 @@
 
 Single source of truth for what code review means in this repo. Consumed by the
 Gemini pre-push gate (`automation-prompts/aibtc-combined.md`, Phase 5), by any
-`/code-review` or ad-hoc review session, and by human reviewers. Pattern
-borrowed from the vibewatch-app review pipeline.
+ad-hoc review session, and by human reviewers. Pattern borrowed from the
+vibewatch-app review pipeline.
+
+## Review layers (and who pays)
+
+Reviews of Sonic Mast's code run on Sonic Mast's own accounts or free tiers —
+**never on the operator's billed accounts** (operator preference, 2026-07-11;
+the operator's CodeRabbit / Claude credits are reserved for vibewatch etc.).
+
+1. **In-session hooks** (`.claude/hooks/` + `security-patterns.yaml`) —
+   deterministic, zero-cost, fire on every edit.
+2. **Gemini pre-push gate** (Phase 5 of the combined prompt) — `GEMINI_API_KEY`
+   free tier, pipes this file in as system context. Runs before any push.
+3. **Cubic** (`cubic-dev-ai[bot]`, [cubic.dev](https://cubic.dev) GitHub app on
+   the sonic-mast account, free tier ~20 reviews/mo) — the **PR review of
+   record**. Installed by the operator 2026-07. Devin
+   (`devin-ai-integration[bot]`) and Gemini Code Assist
+   (`gemini-code-assist[bot]`, consumer bot sunsets 2026-07-17) still comment
+   while they last.
+
+Do not invoke operator-billed reviewers (`/code-review` → CodeRabbit,
+ultrareview, etc.) on Sonic Mast work.
 
 ## Severity
 

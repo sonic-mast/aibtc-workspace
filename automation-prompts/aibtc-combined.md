@@ -810,15 +810,16 @@ For bounties: follow bounty-specific submission flow per the bounty's spec. Same
 
 **5c. Status: `awaiting-review` — Check automated reviews**
 
-Two bots review PRs on the fork automatically:
-- **Devin Review** (`devin-ai-integration[bot]`) — posts `BUG_` and `ANALYSIS_` findings as inline PR comments
-- **Gemini Code Assist** (`gemini-code-assist[bot]`) — posts review comments with issue descriptions
+Three bots review PRs on Sonic Mast's repos automatically:
+- **Cubic** (`cubic-dev-ai[bot]`) — the review of record; runs on Sonic Mast's own GitHub account (operator installed the cubic.dev app 2026-07; free tier ~20 reviews/mo). Treat its concrete bug findings like Devin `BUG_` items; style notes are optional.
+- **Devin Review** (`devin-ai-integration[bot]`) — posts `BUG_` and `ANALYSIS_` findings as inline PR comments (free tier is being sunset; may disappear)
+- **Gemini Code Assist** (`gemini-code-assist[bot]`) — posts review comments with issue descriptions. **The consumer bot sunsets 2026-07-17** — after that date its absence is expected, not a `review-timeout`.
 
-Check for reviews from both:
+Check for reviews from all three:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
 import sys,json
 reviews = json.load(sys.stdin)
-bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bots = ['cubic-dev-ai[bot]', 'devin-ai-integration[bot]', 'gemini-code-assist[bot]']
 bot_reviews = [r for r in reviews if r.get('user',{}).get('login') in bots]
 if not bot_reviews:
     print(json.dumps({'status': 'pending', 'count': 0}))
@@ -838,7 +839,7 @@ Only look at comments from the **latest** review round (Devin re-reviews post ne
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/reviews" | python3 -c "
 import sys,json
 reviews = json.load(sys.stdin)
-bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bots = ['cubic-dev-ai[bot]', 'devin-ai-integration[bot]', 'gemini-code-assist[bot]']
 bot_reviews = [r for r in reviews if r.get('user',{}).get('login') in bots]
 latest_ids = {}
 for r in bot_reviews:
@@ -851,17 +852,17 @@ Then parse findings only from the latest review's comments:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{prNumber}/comments" | python3 -c "
 import sys,json
 comments = json.load(sys.stdin)
-bots = ['devin-ai-integration[bot]', 'gemini-code-assist[bot]']
+bots = ['cubic-dev-ai[bot]', 'devin-ai-integration[bot]', 'gemini-code-assist[bot]']
 latest_ids = {LATEST_IDS_FROM_ABOVE}
 bot_comments = [c for c in comments if c.get('user',{}).get('login') in bots and c.get('pull_request_review_id') in latest_ids.values()]
 bugs = [c for c in bot_comments if 'BUG_' in c.get('body','') and '✅' not in c.get('body','')]
-analysis = [c for c in bot_comments if 'ANALYSIS_' in c.get('body','') or ('gemini-code-assist' in c.get('user',{}).get('login','') and '✅' not in c.get('body',''))]
+analysis = [c for c in bot_comments if 'ANALYSIS_' in c.get('body','') or (c.get('user',{}).get('login','') in ('gemini-code-assist[bot]', 'cubic-dev-ai[bot]') and '✅' not in c.get('body',''))]
 print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'body': c['body'][:300], 'path': c.get('path',''), 'reviewer': c['user']['login']} for c in bugs[:5]]}))"
 `
 
 - If 0 `BUG_` findings in the latest review round → reviews passed. Set `status` to `submitting` and proceed to 5e now.
 - If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`, and proceed to 5d now (same run).
-- Treat Gemini comments that flag concrete bugs the same as Devin `BUG_` findings — fix them. Treat style suggestions as optional (like `ANALYSIS_`).
+- Treat Cubic and Gemini comments that flag concrete bugs the same as Devin `BUG_` findings — fix them. Treat style suggestions as optional (like `ANALYSIS_`).
 
 **5d. Status: `fixing` — Address review feedback**
 
@@ -873,7 +874,7 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 6. Push the fix to the same branch. Env-branch per CRITICAL rule 13:
    - **Local**: `git add <changed-files> && git commit -m "fix({skill-name}): <short reason>" && git push`.
    - **Remote**: skip `git commit` — call `mcp__github__push_files` with the same owner/repo/branch from state and the fixed file contents. A bare `git commit` in remote returns `signing operation failed: ... 400 missing source` and then stream-idle-timeouts on the MCP pivot — go straight to MCP.
-   Both bots will automatically re-review on new commits either way.
+   The bots will automatically re-review on new commits either way.
 7. Set `status` back to `awaiting-review`, update `lastActionAt`.
 8. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
