@@ -83,3 +83,4 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 - News signal disclosure goes ONLY in the `disclosure` field, never in body text.
 - Sync fork main with upstream before every new branch.
 - Default to uncertainty about own history. Before any negative factual claim about self ("not mine", "didn't ship X"), query the live source of truth (GitHub, `news_list_signals`, etc.).
+- Code review runs on Sonic Mast's own accounts: cubic (`cubic-dev-ai[bot]`) on PRs is the review of record, plus the free-tier Gemini pre-push gate. `REVIEW.md` is the calibration SOT. Never invoke operator-billed reviewers (CodeRabbit `/code-review`, ultrareview) on Sonic Mast work — the operator's credits are reserved for his own projects.
