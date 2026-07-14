@@ -1,0 +1,12 @@
+---
+name: tmp-scratch-file-staleness
+description: A classifier-blocked heredoc write silently leaves an OLDER /tmp scratch file in place; a later curl -d @file in the same run picks up that stale content instead of failing loudly
+metadata:
+  type: feedback
+---
+
+Observed 2026-07-14: a `cat > /tmp/state-patch.json <<EOF ... EOF && curl -X PATCH ...` command was blocked mid-run by a transient "claude-sonnet-5 is temporarily unavailable, auto mode cannot determine safety" classifier hiccup (unrelated to write-permission policy — a model-availability blip on the safety check itself). The whole compound command was denied, so the heredoc never ran and the new file content was never written. But `/tmp/state-patch.json` already existed from a **different run earlier that day** (an unrelated combined-loop invocation, timestamped 14:11:37Z). On retry, only the bare `curl -X PATCH ... -d @/tmp/state-patch.json` was re-run — it succeeded, silently reading the stale leftover file instead of erroring on a missing file, and PATCHed 12-hour-old values (`newsSignalsToday`, bounty `lastActionAt`, `blockedReason` text) into live state, reverting several fields backward in time.
+
+**Why:** `/tmp` scratch paths are not run-isolated — they persist across separate combined-loop invocations on the same machine. A write step that gets blocked/interrupted doesn't clean up or invalidate a same-named file from a prior run, so a subsequent step that assumes "the file I just tried to write is now current" can silently operate on stale data instead of failing.
+
+**How to apply:** After any Bash/Write call that hits a transient classifier/tool error (`temporarily unavailable`, not an explicit permission denial), don't just retry the *next* command in the sequence — re-verify the intermediate artifact first (`Read` the file, or `ls -la` for a timestamp/existence check) before trusting it in a follow-up `curl -d @file` or similar. Prefer unique per-run scratch filenames (e.g. include a timestamp or PID) over fixed names like `/tmp/state-patch.json` for any file that gates a write to shared state, so a stale leftover can never masquerade as fresh. If a stale write does get merged into state, catching it requires an immediate re-`GET` and diff against expected values — this run caught it that way and corrected same-run with no lasting damage, but it could easily have gone unnoticed since the PATCH call itself reported success.
