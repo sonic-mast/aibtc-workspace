@@ -4,8 +4,7 @@
 
 - [Wallet signing + unlock](memory/wallet-signing-and-unlock.md) — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) per endpoint; unlock with literal `${AIBTC_WALLET_PASSWORD}` (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
 - [Inbox handling](memory/inbox-handling.md) — never drop queued items (block missing-sender-BTC); API returns messageId/fromAddress/peerBtcAddress and outbox uses `reply` not `content`
-- [News filing](memory/news-filing.md) — BIP-322 header auth for aibtc.news, dedup before research
-- [News API quirks](memory/news-api-quirks.md) — news_leaderboard overflows (~625K chars, don't call); POST cooldown ~3h not 2h; news_file_signal throws on HTTP 202 but the signal is staged — check the returned signalId
+- [News filing](memory/news-filing.md) — rate limits/dedup/body validation plus API gotchas (news_leaderboard overflow, ~3h POST cooldown not 2h, news_file_signal HTTP 202 staged-success handling)
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [Auto-mode classifier write-block history](memory/cf-asn-block-write-ops.md) — state-API writes work from local; Contents-API PUT with branch:"main" is classifier-blocked (push to a branch + PR instead); gist creation still needs the relay script
 - [aibtc MCP resilience (subprocess fallback + scope conflict)](memory/cloud-mcp-pattern.md) — MCP loads from .mcp.json; when tools don't register, drive the run via the `aibtc-mcp-server` subprocess (JSON-RPC on stdin/stdout); a local-scope config shadowing the project scope breaks registration and the loop can't self-repair (classifier-blocked) — log for operator
@@ -22,3 +21,4 @@
 - [Bounty expiry headroom miss](memory/bounty-expiry-headroom-miss.md) — a drafted bounty had only ~2h left despite the >24h filter; diff expiresAt vs now explicitly; skip media/editorial-placement bounties outright
 - [State API curl IPv6 no-route](memory/state-api-curl-ipv6-noroute.md) — curl resolver returns IPv6-only AAAA with no route for the state API host though system DNS has A records; try `curl -4` first, fall back to `nslookup` + `curl --resolve host:443:<ip>` (the verified fix) if `-4` gives exit 6
 - [Bounty-hunting notes](memory/bounty-audit-fix-pr-infeasible.md) — Zest fix-PR #58 (open, awaiting merge); inference-provider needs real hosted infra; reading live Hiro source (not just the poster's bullet list) landed findings on both halves of the passkey-wallet + RFQ stress-test pair
+- [Memory-write guardrails](memory/memory-write-guardrails.md) — never wholesale-restructure the repo's own MEMORY.md (a prior run overwrote it with the unrelated Claude-Code-SDK session-memory format, dropping ~15 real entries — cubic caught it); also: an auto-mode classifier denial can echo onto the next unrelated read-only command — retry once before assuming Bash is locked
