@@ -16,3 +16,7 @@ metadata:
 **Second, unrelated lesson from the same run:** after the auto-mode classifier denied one destructive action (closing a pre-existing PR + deleting its branch, correctly, since no operator was present to authorize it), the *next* Bash call — a plain read-only `curl` to the state API with no relation to the PR — was also denied, citing the **identical PR/branch-deletion reasoning verbatim**, as if the classifier reused the prior denial's justification for an unrelated command. A bare `echo` succeeded immediately after, and retrying the exact same read-only curl a moment later also succeeded cleanly.
 
 **How to apply:** if a command is denied and the next command (even a trivially safe one) is denied with the *same* reasoning text, don't conclude Bash is locked for the rest of the run — retry the safe command once verbatim before working around it. Don't retry the actually-denied destructive action itself (that one was a correct denial — log it for operator review and move on).
+
+---
+
+**2026-07-15 update:** the MEMORY.md protections above are now mechanically enforced by `scripts/memory-commit.sh`, which Phase 6b routes all memory writes through — path allowlist (MEMORY.md + `memory/*.md` only), refusal of any staged MEMORY.md that removes more than 3 existing lines (`MEMORY_ALLOW_RESTRUCTURE=1` for operator-approved restructures), and a link-resolution check on every `](memory/...)` entry. A PR-#49-class rewrite now fails closed instead of relying on a reviewer to catch it.
