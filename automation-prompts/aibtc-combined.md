@@ -91,7 +91,7 @@ if [ -f /home/claude/.ssh/commit_signing_key.pub ] || git rev-parse --abbrev-ref
   IS_REMOTE=1
 else
   IS_REMOTE=0
-  git pull --ff-only origin main 2>/dev/null || true   # Phase 3/6 write only to /tmp or push via the Contents API and never edit repo files in place, so the tree stays clean and this fast-forwards.
+  git pull --ff-only origin main 2>/dev/null || true   # Phase 3/6 write only to /tmp or land via scripts/memory-commit.sh (temp index — tree untouched), so the tree stays clean and this fast-forwards.
   # Self-update health check: if HEAD is STILL behind origin/main, something dirtied the working tree and the loop is about to run STALE code. Surface it loudly — never silently continue.
   STALE_CHECKOUT=0
   if [ "$(git rev-parse HEAD 2>/dev/null)" != "$(git rev-parse origin/main 2>/dev/null)" ]; then
@@ -102,7 +102,7 @@ else
 fi
 ```
 
-Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a dirty tree triggers the harness auto-PR; on local it blocks the next Phase 0 ff-pull and freezes the loop on stale code. Phases 3 and 6 keep it clean by writing only to `/tmp` or pushing via the Contents API — they never edit repo files in place. **If `STALE_CHECKOUT=1`, Phase 7 MUST set `notable: "STALE-CHECKOUT: phase0 ff-pull blocked, ran old code (dirty: <files>)"`** so the daily digest flags it instead of the loop drifting silently.
+Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a dirty tree triggers the harness auto-PR; on local it blocks the next Phase 0 ff-pull and freezes the loop on stale code. Phases 3 and 6 keep it clean by writing only to `/tmp` or landing commits via `scripts/memory-commit.sh`, which builds them in a temporary git index — they never edit repo files in place. **If `STALE_CHECKOUT=1`, Phase 7 MUST set `notable: "STALE-CHECKOUT: phase0 ff-pull blocked, ran old code (dirty: <files>)"`** so the daily digest flags it instead of the loop drifting silently.
 
 ### Phase 0.5: Wallet circuit breaker (token guard)
 
@@ -922,7 +922,24 @@ If this run produced no meaningful output (news skipped AND code idle/no-action)
    **Update README and commit**:
    1. `Edit README.md` with `replace_all: true` — swap every occurrence of the old code with the new one.
    2. Also check `CLAUDE.md`, `SOUL.md`, and `memory/` files for any stray mentions of the old code. `git grep "<OLD_CODE>"` first; if matches exist outside README, replace those too.
-   3. Push each changed file to `main` via the Contents API curl pattern (Phase 6 snippet, with `MSG="chore: rotate referral code to {NEW}"`). Never `git commit && git push` from this routine — on remote, CCR intercepts it as a PR.
+   3. Push each changed file to `main` via the Contents API (never `git commit && git push` from this routine — on remote, CCR intercepts it as a PR). Note: this snippet is for THIS routine's README/doc files only; memory files always go through `scripts/memory-commit.sh` (Phase 6b).
+
+      ```bash
+      TOKEN="$GITHUB_TOKEN"; OWNER=sonic-mast; REPO=aibtc-workspace; MSG="chore: rotate referral code to {NEW}"
+      push_file() {  # $1 = repo path (the in-place edited file)
+        local SHA CONTENT BODY
+        SHA=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+          "https://api.github.com/repos/$OWNER/$REPO/contents/$1?ref=main" | jq -r '.sha // empty')
+        CONTENT=$(base64 -w0 < "$1" 2>/dev/null || base64 < "$1" | tr -d '\n')
+        BODY=$(jq -n --arg m "$MSG" --arg c "$CONTENT" --arg s "$SHA" \
+          '{message:$m, content:$c, branch:"main"} + (if $s == "" then {} else {sha:$s} end)')
+        curl -sf -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          "https://api.github.com/repos/$OWNER/$REPO/contents/$1" -d "$BODY" >/dev/null
+      }
+      push_file README.md   # one call per changed file
+      ```
+
+      If the classifier blocks the PUT, log `notable: "ref code rotated to {NEW}; README push blocked — operator: commit the local edit"` and move on. (The in-place edit matches what was pushed, so the next run's ff-pull reconciles it cleanly when the push succeeded.)
    4. Log in the run log `notable` field: `"rotated ref code: OLD→NEW"`.
 
 This phase should take 2-5 minutes. The goal is to always leave a run having done something useful. Three consecutive heartbeat-only runs is a waste of tokens.
@@ -970,31 +987,23 @@ The goal is continuous improvement: your approval rate should trend upward over 
 - Things already documented in the prompt or CLAUDE.md
 - Temporary state (that's what the state API is for)
 
-**How to write — stage to `/tmp`, push via the Contents API, NEVER edit the repo in place.** Editing files under `memory/` or the root `MEMORY.md` directly dirties the working tree, which then blocks the next run's `git pull --ff-only` and **silently freezes the loop on stale code** — this is the exact bug that kept fixes from ever landing. So the working copy is read-only to the loop; all writes go to origin via the API.
+**How to write — stage to `/tmp`, land via `scripts/memory-commit.sh`, NEVER edit the repo in place.** Editing files under `memory/` or the root `MEMORY.md` directly dirties the working tree, which then blocks the next run's `git pull --ff-only` and **silently freezes the loop on stale code**. The script keeps the tree untouched: it builds ONE commit off `origin/main` in a temporary git index, enforces the memory guardrails (path allowlist, MEMORY.md rewrite protection, index-link check), and plain-git-pushes to `main`. It is allowlisted in `.claude/settings.json`, so it runs without classifier friction. Do NOT use the Contents API, ad-hoc `git commit`/`git push`, or any hand-rolled branch+PR flow for memory writes — every one of those paths has produced stray PRs or duplicate commits in the past.
 
-1. Decide the change. Compose the FULL new file content with frontmatter: `name`, `description`, `type` (feedback/project/reference). Body = the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters).
-2. Write the new/updated memory file to a **temp path** — `/tmp/mem-<name>.md`. Do **NOT** write under `memory/`.
-3. For the index: take the current root `MEMORY.md` you read at the top of Phase 6 (the clean pulled copy), apply the one-line pointer add/update **in context**, and write the full result to `/tmp/MEMORY.md`. Do **NOT** edit the repo's `MEMORY.md`.
-4. Push each staged file to its repo path on `main` via the Contents API — same path local and remote, never `git commit`/`git push` (remote: CCR opens a stray PR; local: drifts). The repo working tree is never touched, so it stays clean and Phase 0 always fast-forwards. Memory changes never go through PR review.
+1. **Reconcile first:** `bash scripts/memory-commit.sh --reconcile`. It lands any stray `memory/*` PR branch left by a previous run onto main (only when safe: memory-only paths, no divergence from main, guardrails pass) and closes the PR. `RECONCILE_CLEAN` = nothing to do. Copy any `SKIP #N <reason>` line verbatim into the run log `notable` field so the digest surfaces it to the operator. Run this even when you have no memory to write this run.
+2. Decide the change. Compose the FULL new file content with frontmatter: `name`, `description`, `type` (feedback/project/reference). Body = the rule/fact, then **Why:** (what happened), then **How to apply:** (when this matters). Write it to a **temp path** — `/tmp/mem-<name>.md`. Do **NOT** write under `memory/`.
+3. For the index: take the current root `MEMORY.md` you read at the top of Phase 6 (the clean pulled copy), apply the **one-line** pointer add/update **in context**, and write the full result to `/tmp/MEMORY.md`. Never regenerate or restructure the file — the script refuses a MEMORY.md that removes more than 3 existing lines or whose `](memory/...)` links don't all resolve.
+4. Land everything in ONE call:
 
    ```bash
-   TOKEN="$GITHUB_TOKEN"; OWNER=sonic-mast; REPO=aibtc-workspace; MSG="memory: {short description}"
-   push_mem() {  # $1 = repo path (dest on main), $2 = staged /tmp source
-     [ -f "$2" ] || return 0
-     local SHA CONTENT BODY
-     SHA=$(curl -sf -H "Authorization: Bearer $TOKEN" \
-       "https://api.github.com/repos/$OWNER/$REPO/contents/$1?ref=main" | jq -r '.sha // empty')
-     CONTENT=$(base64 -w0 < "$2" 2>/dev/null || base64 < "$2" | tr -d '\n')
-     BODY=$(jq -n --arg m "$MSG" --arg c "$CONTENT" --arg b main --arg s "$SHA" \
-       '{message:$m, content:$c, branch:$b} + (if $s == "" then {} else {sha:$s} end)')
-     curl -sf -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-       "https://api.github.com/repos/$OWNER/$REPO/contents/$1" -d "$BODY" >/dev/null
-   }
-   push_mem MEMORY.md /tmp/MEMORY.md
-   push_mem memory/<name>.md /tmp/mem-<name>.md   # one call per changed memory file
+   bash scripts/memory-commit.sh "memory: {short description}" \
+     MEMORY.md=/tmp/MEMORY.md \
+     memory/<name>.md=/tmp/mem-<name>.md   # repeat dest=src per changed file
    ```
 
-   To DELETE a memory file: call the Contents API `DELETE` with its current `sha` — do not `rm` it locally. Notes: `base64 -w0` is GNU; macOS has no `-w`, so the fallback strips newlines. Because nothing is ever written under `memory/` locally, the next run's Phase 0 `git pull --ff-only` brings these changes down cleanly — there is no working-tree reconcile to do (this replaces the old, local-skipping `git checkout` cleanup that left the tree dirty).
+   To DELETE a memory file: pass `memory/<name>.md=@delete` and remove its index line in `/tmp/MEMORY.md` (a one-line removal, still under the 3-line cap). Read the script's last output line:
+   - `PUSHED <sha>` or `NOOP` — done.
+   - `FALLBACK_PR=<n>` — the push to main failed; the script parked the commit on a PR instead. Append `<n>` to the `pendingMemoryPRs` KV array (`POST /kv/pendingMemoryPRs/append`) and put `FALLBACK_PR=<n>` in the run log `notable`. The next run's step-1 reconcile lands it. Do NOT retry the push yourself and do NOT open a second PR.
+   - `REFUSED: ...` — a guardrail fired. Fix the staged file (usually: you restructured MEMORY.md instead of editing one line) and retry ONCE; if it still refuses, skip the write and log the refusal in `notable`.
 
 **Maintenance:** If a memory is now wrong (e.g., a workflow changed), update or delete it. Keep MEMORY.md under 20 entries.
 
