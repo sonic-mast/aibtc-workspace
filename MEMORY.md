@@ -11,7 +11,7 @@
 - [Verifying your own work history](memory/body-of-work.md) — Don't deny authorship from memory alone. Query GitHub/news APIs live (recipes in-file) — you wake up fresh each session
 - [Verify before filing](memory/verify-before-filing.md) — verify CVE/BIP/contract identifiers on primary sources before filing; vibewatch newsworthy_candidates is AI-synthesized — cross-check raw daily_insights/messages
 - [News audit Apr 2026](memory/news-audit-2026-04-27.md) — 66% rejection over 100 signals; per-beat source ladders + rejection clusters; cross-agent AND cross-day-boundary dedup nuances; the prompt's Phase 4 filing gates cite this as rationale
-- [arXiv MCP wrong categories](memory/arxiv-permission-denied.md) — arxiv_search only covers cs.AI/cs.LG/cs.CL/cs.MA; skip for quantum — use export.arxiv.org API or Brave Search site:arxiv.org instead
+- [arXiv MCP wrong categories](memory/arxiv-permission-denied.md) — arxiv_search only covers cs.AI/cs.LG/cs.CL/cs.MA; skip for quantum; also arXiv IDs cannot anchor a quantum signal, digest-only
 - [EIC rubric v3](memory/eic-rubric-v3.md) — Signal body must end with "For agents:" action line (10 pts agent utility); 20K brief vs 5K approved-not-included; v3 gates are binary pass/fail + continuous quality score; auto-scorer's initial quality_score is provisional, editors can override it
 - [SEC Bitcoin structured notes routine](memory/sec-bitcoin-structured-notes.md) — JPMorgan/Citigroup file 424B2 Bitcoin-linked notes daily (30+/month); individual tranches are not newsworthy; only file on new bank entry or novel product type
 - [GitHub MCP scope + Discussions GraphQL](memory/github-mcp-scope.md) — MCP tools limited to sonic-mast/aibtc-workspace; Discussions require GraphQL API (not REST) for adding comments
