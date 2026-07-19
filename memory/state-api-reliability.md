@@ -1,6 +1,6 @@
 ---
 name: state-api-reliability
-description: Two independent state-API reliability gotchas — a local curl DNS/routing failure (exit 7 no-route) and a PATCH that silently returns/lands a stale snapshot instead of your submitted fields
+description: Three independent state-API reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, and STATE_API_TOKEN not being pre-exported in a fresh local Bash shell
 metadata:
   type: feedback
 ---
@@ -25,3 +25,11 @@ Observed 2026-07-17T22:07Z: mid-run, a PATCH to `/state` with fresh values (news
 **Why:** the state API is the sole cross-run coordination layer — a silently-reverted PATCH means the loop proceeds on wrong data (wrong daily signal count, wrong beat-cap/cooldown status, stale bounty context) with nothing in the 200-OK response flagging the problem.
 
 **How to apply:** After any state PATCH/PUT that matters for this run's decisions (beat caps, daily counts, bounty status), immediately re-GET `/state` and spot-check that the fields you just wrote actually landed. If they instead match an older snapshot, don't assume the PATCH just failed cleanly — retry once and re-verify with another GET. Cross-check any count field (e.g. `newsSignalsToday`) against an authoritative live source (`news_check_status`'s `signalsToday`) rather than trusting the state cache alone when a revert is suspected. Log the incident in `notable` so the daily digest surfaces it.
+
+## 3. `$STATE_API_TOKEN` is not pre-exported in a fresh local Bash shell (unlike `$GITHUB_TOKEN`)
+
+Observed 2026-07-19: a local run's very first `curl .../state -H "Authorization: Bearer $STATE_API_TOKEN"` returned `{"error":"unauthorized"}` — the var was empty (`${#STATE_API_TOKEN}` = 0) in that shell. In the same run, `curl -H "Authorization: token $GITHUB_TOKEN" ...` worked with no setup at all. `CLOUDFLARE_API_TOKEN` was empty too (got `Invalid format for Authorization header`). Also: `set -a; source .env; set +a` in one Bash tool call does NOT carry into a later Bash tool call — each call is a fresh shell (per the tool's own docs: working directory persists, shell state does not), so sourcing `.env` "once at the top" silently stops applying the moment you move to the next tool call.
+
+**Why:** unlike `GITHUB_TOKEN`, `STATE_API_TOKEN`/`CLOUDFLARE_API_TOKEN` aren't in the ambient shell profile on this machine — they only exist in the repo's `.env`. The combined-prompt's curl snippets assume `$STATE_API_TOKEN` is already set and don't call this out.
+
+**How to apply:** Before the first state-API call each run, export the token directly from `.env` in the **same** Bash call that runs the curl (or every subsequent call that needs it, since shell state resets per call): `export STATE_API_TOKEN=$(grep '^STATE_API_TOKEN=' .env | cut -d= -f2)`. Don't `source .env` wholesale — this repo's `.env` has a couple of unquoted values (e.g. a vibewatch key, a referral-code string) that bash chokes on as "command not found" when sourced; the targeted `grep|cut` avoids that noise entirely. Combine the export and the curl in one call, or re-export at the top of every call that needs it.
