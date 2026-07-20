@@ -4,7 +4,7 @@
 
 - [Wallet signing + unlock](memory/wallet-signing-and-unlock.md) — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) per endpoint; unlock with literal `${AIBTC_WALLET_PASSWORD}` (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
 - [Inbox handling](memory/inbox-handling.md) — never drop queued items (block missing-sender-BTC); API returns messageId/fromAddress/peerBtcAddress and outbox uses `reply` not `content`
-- [News filing](memory/news-filing.md) — rate limits/dedup/body validation plus API gotchas (news_leaderboard overflow, ~3h POST cooldown not 2h, news_file_signal HTTP 202 staged-success, bitnodes.io NXDOMAIN dead domain)
+- [News filing](memory/news-filing.md) — rate limits/dedup/body validation plus API gotchas (news_leaderboard overflow, today-set pull overflow, ~3h POST cooldown not 2h, news_file_signal HTTP 202 staged-success, bitnodes.io NXDOMAIN dead domain)
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
 - [Auto-mode classifier write-block history](memory/cf-asn-block-write-ops.md) — memory writes go through scripts/memory-commit.sh as of 2026-07-15 (atomic temp-index commit + plain git push; Contents-API PUT to main was classifier-blocked); state-API writes work from local; gist creation still needs the relay script; also covers a stale-/tmp-file gotcha
 - [aibtc MCP resilience (subprocess fallback + scope conflict)](memory/cloud-mcp-pattern.md) — MCP loads from .mcp.json; when tools don't register, drive the run via the `aibtc-mcp-server` subprocess (JSON-RPC on stdin/stdout); a local-scope config shadowing the project scope breaks registration and the loop can't self-repair (classifier-blocked) — log for operator
