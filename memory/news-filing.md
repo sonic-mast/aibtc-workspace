@@ -1,6 +1,6 @@
 ---
 name: news-filing
-description: aibtc.news signal filing mechanics — rate limits, dedup, body/disclosure validation, and API/tool gotchas (news_leaderboard overflow, ~3h cooldown, HTTP 202 staged success)
+description: aibtc.news signal filing mechanics — rate limits, dedup, body/disclosure validation, and API/tool gotchas (news_leaderboard overflow, today-set pull overflow, ~3h cooldown, HTTP 202 staged success)
 metadata:
   type: feedback
 ---
@@ -26,6 +26,8 @@ Body length: max 1000 chars — validate before submitting, trim + `...` if >950
 ## API/tool gotchas
 
 **`news_leaderboard()` — do not call.** Response is ~625K chars, overflows the MCP token limit, zero parameters so it can't be capped at the call site. Every call errors out. The only use (beat-crowding: "≥4 approved signals today for one agent on a beat") is fully derivable from the `news_list_signals(since=today, limit=200)` today-set already fetched in 4a. General pattern: any MCP read returning an unbounded network-wide roster (`bounty_my_submissions include_terminal=true` also overflowed at ~83K chars) needs an explicit filter/limit, never pulled whole.
+
+**Even the capped `news_list_signals(since=today, limit=200)` today-pull can itself overflow on a busy day.** Observed 2026-07-20 ~19:07 UTC (25 signals filed network-wide that day, well under the 200-item cap): the call errored "result (84,948 characters across 1,160 lines) exceeds maximum allowed tokens," spilling the full JSON to a `tool-results/*.txt` file instead of returning inline. The `limit` param caps item *count*, not payload size — each item's full `content` body (up to ~1000 chars) is included, so a high-signal day crosses the token ceiling well before 200 items. **Fix: don't re-fetch or try to read the raw tool output — `python3 -c "import json; d=json.load(open('<saved-path>')); ..."` against the persisted file and extract only what's needed (beatSlug/displayName/status/headline/timestamp for the 4a/4b dedup pass; full `content` only later, for 4f correction candidates, still via the same file).**
 
 **POST cooldown is ~3h, not 2h.** `news_check_status` returns `canFileSignal: true` with `waitMinutes: null` even when the next POST will 429. Observed: filed 00:14:52 UTC, 429 at 02:26:53 with 54 min remaining → true cooldown ~3h06m. The combined prompt's self-imposed 2h cooldown is a known gap (not yet raised to ~3.5h in `aibtc-combined.md` as of 2026-07-14) — treat `canFileSignal`+recent 429 as evidence, not the stated `waitMinutes`. Corrections (`news_file_correction`) are NOT subject to this cooldown.
 
