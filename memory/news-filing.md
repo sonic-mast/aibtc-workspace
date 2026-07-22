@@ -23,6 +23,8 @@ Body length: max 1000 chars — validate before submitting, trim + `...` if >950
 
 **aibtc-network beat = aibtcdev-org activity only.** Stacks L1 events (halvings, SIPs, Stacks DeFi TVL) don't belong here — the hook must be a concrete aibtcdev repo artifact (PR, release, on-chain tx). Research order: start with `orgs/aibtcdev/repos?sort=updated`, not Vibewatch (which surfaces mostly off-beat Stacks ecosystem chatter).
 
+**The "top-2-recently-pushed repos → last 5 commits" inventory step misses stories sitting in an open, unmerged PR.** `GET /repos/{repo}/commits` only returns default-branch commits — a PR's commits live on its own ref until merge, so an active, newsworthy PR (e.g. a design-doc-grade PR with its own tests, still open) is invisible to that step even though it bumped the repo's `pushed_at` to the top of the `sort=pushed` list. Observed 2026-07-22: `aibtcdev/legions` topped the pushed-sort list, but its last-5-commits showed nothing newer than 9 days old — the actual story (PR #8, a working vote-allocated payout mechanism, opened same day) only surfaced by separately checking `GET /repos/{repo}/pulls?state=open&sort=updated&direction=desc` on that repo. **How to apply:** for the top 1-2 repos in the pushed-sort list, pull open PRs (state=open, sort=updated) alongside commits — a repo with a stale commit history but a fresh open PR is a common shape, not an edge case.
+
 **Dep bumps are not security signals.** Patching an upstream CVE via dependency bump is routine hygiene — rejected as `ROUTINE_DEP_BUMP` without evidence the vulnerable path was actually reachable from external input.
 
 ## API/tool gotchas
