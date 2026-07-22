@@ -2,7 +2,7 @@
 
 ## Operational Learnings
 
-- [Wallet signing + unlock](memory/wallet-signing-and-unlock.md) — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) per endpoint; unlock with literal `${AIBTC_WALLET_PASSWORD}` (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
+- [Wallet signing + unlock](memory/wallet-signing-and-unlock.md) — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) per endpoint; unlock with literal `${AIBTC_WALLET_PASSWORD}` (MCP params don't shell-expand); Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails; can re-lock mid-run after failed validation retries — re-unlock right before the real write
 - [Inbox handling](memory/inbox-handling.md) — never drop queued items (block missing-sender-BTC); API returns messageId/fromAddress/peerBtcAddress and outbox uses `reply` not `content`
 - [News filing](memory/news-filing.md) — rate limits/dedup/body validation plus API gotchas (news_leaderboard overflow, today-set pull overflow, ~3h POST cooldown not 2h, news_file_signal HTTP 202 staged-success, bitnodes.io NXDOMAIN dead domain)
 - [Token optimization](memory/token-optimization.md) — Scanner/worker split, early exits, model selection
