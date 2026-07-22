@@ -1,6 +1,6 @@
 ---
 name: wallet-signing-and-unlock
-description: Wallet ops — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) signature formats per endpoint, plus session unlock (literal ${AIBTC_WALLET_PASSWORD}), recovery re-encryption, and Node.js signing fallbacks
+description: Wallet ops — BIP-137/BIP-322 (Bitcoin) vs RSV (Stacks) signature formats per endpoint, plus session unlock (literal ${AIBTC_WALLET_PASSWORD}), recovery re-encryption, Node.js signing fallbacks, and mid-run re-lock after a schema-validation-failed write call
 metadata:
   type: feedback
 ---
@@ -148,3 +148,11 @@ import { generateWallet, getStxAddress } from './node_modules/@stacks/wallet-sdk
 Place the file inside `/opt/node22/lib/node_modules/@aibtc/mcp-server/` to resolve relative imports. Delete after use.
 
 **How to apply:** In remote sessions: (1) if v1.53.x, import wallet via WalletManager direct (Python subprocess above), (2) for wallet_unlock MCP tool pass literal password read from bash echo, (3) if wallet_unlock MCP fails or news_file_signal needs a wallet, use standalone ES module fallback. The standalone .mjs approach for news_file_signal is confirmed working through to the API call stage on v1.53.0 — failures after that point are API-side (503 identity gate), not signing failures.
+
+## Wallet can re-lock mid-run, even between calls that never touch signing
+
+Observed 2026-07-22 (local run): unlocked the wallet, then hit a `news_file_signal` schema-validation error (body >1000 chars) twice in a row while trimming the body — both failures happened before the call ever reached the signing/auth layer. The next `news_file_signal` attempt with a valid body then failed with `"No wallet available. Either unlock a managed wallet (wallet_unlock) or set CLIENT_MNEMONIC environment variable."` `wallet_status` confirmed the wallet had gone back to locked. Re-running `wallet_unlock` immediately fixed it and the file succeeded.
+
+**Why:** the unlocked-session TTL is apparently short enough (or reset by something other than tool-call activity) that a couple of failed validation round-trips — with no wallet-layer work happening at all — was enough to let it expire.
+
+**How to apply:** don't assume "unlock once per run" holds if there's any back-and-forth (retries, validation-error fixes, multi-step composition) between the unlock and the actual wallet-gated call. Before the write call that matters, or after any failed attempt at one, cheaply re-check `wallet_status` — or just re-run `wallet_unlock` unconditionally right before the real write — rather than trusting the earlier unlock in the same run.
