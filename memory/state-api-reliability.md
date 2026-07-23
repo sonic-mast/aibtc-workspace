@@ -1,6 +1,6 @@
 ---
 name: state-api-reliability
-description: Three independent state-API reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, and STATE_API_TOKEN not being pre-exported in a fresh local Bash shell
+description: Three independent state-API reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, and env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell
 metadata:
   type: feedback
 ---
@@ -32,4 +32,20 @@ Observed 2026-07-19: a local run's very first `curl .../state -H "Authorization:
 
 **Why:** unlike `GITHUB_TOKEN`, `STATE_API_TOKEN`/`CLOUDFLARE_API_TOKEN` aren't in the ambient shell profile on this machine — they only exist in the repo's `.env`. The combined-prompt's curl snippets assume `$STATE_API_TOKEN` is already set and don't call this out.
 
-**How to apply:** Before the first state-API call each run, export the token directly from `.env` in the **same** Bash call that runs the curl (or every subsequent call that needs it, since shell state resets per call): `export STATE_API_TOKEN=$(grep '^STATE_API_TOKEN=' .env | cut -d= -f2)`. Don't `source .env` wholesale — this repo's `.env` has a couple of unquoted values (e.g. a vibewatch key, a referral-code string) that bash chokes on as "command not found" when sourced; the targeted `grep|cut` avoids that noise entirely. Combine the export and the curl in one call, or re-export at the top of every call that needs it.
+**How to apply:** Before the first state-API call each run, export the token directly from `.env` in the **same** Bash call that runs the curl (or every subsequent call that needs it, since shell state resets per call): `export STATE_API_TOKEN=$(grep '^STATE_API_TOKEN=' .env | cut -d= -f2)`. Don't `source .env` wholesale — this repo's `.env` has a couple of unquoted values (e.g. a vibewatch key, a referral-code string) that bash chokes on as "command not found" when sourced; the targeted `grep|cut` avoids that noise entirely.
+
+**Update 2026-07-23 — naive `source .env` doesn't just error on the bad lines, it can silently corrupt other values too.** `set -a; source .env; set +a` printed the expected two `command not found` lines but that wasn't the only damage: `GEMINI_API_KEY` came back 53 chars, when the real key is 39 — word-splitting on an earlier unquoted line's embedded space bled into a later assignment. `STATE_API_TOKEN` and `GITHUB_TOKEN` happened to come through correct that same run, so a "the important tokens worked" spot-check is not enough — a clean-looking 200 response doesn't mean every var is intact. Always length-check (`${#VAR}`) every var you depend on after any wholesale source, not just the one you're about to use first. When more than one or two vars are needed (a full run needs ~10: `GITHUB_TOKEN`, `GEMINI_API_KEY`, `AIBTC_WALLET_PASSWORD`, `STATE_API_TOKEN`, etc.), per-var `grep|cut` doesn't scale and repeating it every Bash call is tedious. Better one-time fix, done once per run:
+
+```bash
+python3 -c "
+with open('.env') as f, open('/tmp/env_fixed.sh','w') as out:
+    for line in f:
+        line = line.rstrip('\n')
+        if not line or line.lstrip().startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        out.write('export ' + k.strip() + '=' + repr(v) + '\n')
+"
+```
+
+Then `source /tmp/env_fixed.sh` at the top of every subsequent Bash call this run (shell state doesn't persist across calls, but the file on disk does). `repr()` single-quotes each value so embedded spaces/`$`/backticks can't word-split or expand — this caught and fixed the corruption. Verify with a length check across all needed vars before trusting any of them.
