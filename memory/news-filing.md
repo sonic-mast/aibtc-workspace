@@ -47,3 +47,5 @@ Body length: max 1000 chars — validate before submitting, trim + `...` if >950
 
 **Why:** these were two separate memory files covering the same news-filing API surface; merging avoids the loop reading near-duplicate guidance twice and keeps MEMORY.md under its entry cap.
 **How to apply:** treat this file as the single source for anything news_file_signal/news_check_status related.
+
+**Bitcoin Optech feed regex was matching zero entries (fixed 2026-07-25).** The 4c.0 sourcing block's Optech pull used `re.findall(r'<entry>.*?...')`, but `bitcoinops.org/feed.xml` emits `<entry xml:lang="en">` (never a bare `<entry>`), so the regex silently returned an empty list every run since it was written — no error, no `optech unavailable` fallback message, just zero newsletters found. Fixed in `automation-prompts/aibtc-combined.md` by matching `<entry[^>]*>` instead. **How to apply:** when a scraping regex against a feed/HTML source returns suspiciously-always-empty, check for attributes on the opening tag before assuming the source itself has nothing new — a silent empty match looks identical to "no new items."
