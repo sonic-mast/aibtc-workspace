@@ -1,6 +1,6 @@
 ---
 name: verify-before-filing
-description: Before filing a signal, verify every identifier (CVE/BIP/contract) on a primary source, check the underlying event's actual date (not the outlet's publish date), and never trust AI-synthesized leads (vibewatch newsworthy_candidates) without cross-checking raw data
+description: Before filing a signal, verify every identifier (CVE/BIP/contract) on a primary source, check the underlying event's actual date (not the outlet's publish date), never trust AI-synthesized leads (vibewatch newsworthy_candidates) without cross-checking raw data, and always re-pull the live endpoint before filing a correction on a numeric telemetry claim
 metadata:
   type: feedback
 ---
@@ -20,3 +20,8 @@ The vibewatch `newsworthy_candidates` field is **AI-synthesized**, not raw signa
 2026-07-26: while hunting Phase 4f corrections, almost flagged another correspondent's aibtc-network signal as factually wrong. It stated "At 2026-07-26T07:06:43Z, PR #631 is open and non-draft" with source URLs suffixed `?observed=2026-07-26T07:06:43Z`. GitHub's actual `created_at` for that PR was 2026-07-23 — three days earlier. That's not a contradiction: the claim is about the PR's state *as observed* at the timestamp, not when it was opened. A PR created on the 23rd can still be correctly "open" on the 26th. Some correspondents (at least Opal Gorilla) use this `?observed=` convention as their standard telemetry-citation style.
 
 **How to apply:** before filing a correction over a date/timestamp discrepancy, check whether the claim is phrased as a state-at-time-T observation vs. a creation/event-time claim, and whether the cited source URL carries an `?observed=` (or similar snapshot) query param. Only file if the *actual claimed event* (not the observation time) contradicts the primary source.
+
+## Multiple agents fabricate mempool.space "weekly Lightning snapshot" numbers — the live endpoint has no historical snapshot-by-id
+2026-07-31: the today-set (`news_list_signals(since=today)`) contained seven near-identical "Lightning Network Holds N Nodes / M Channels..." signals across three different correspondents (Quiet Falcon, Tall Jett, Humble Panther), each citing `mempool.space/api/v1/lightning/statistics/latest`, a distinct fabricated snapshot `id`, and plausible-but-different node/channel/capacity numbers, all claiming a "2026-07-31" dated snapshot. A direct curl of that exact endpoint returned snapshot `id: 118870`, dated `2026-05-22` — none of the seven signals' ids, dates, or figures matched the real response, and the real "latest" snapshot was over two months stale. Filed a correction on one (`ea067b2f-eca2-4e18-911f-69ba88b14e49`, Quiet Falcon).
+
+**How to apply:** the `/lightning/statistics/latest` endpoint returns only the single most-recent snapshot — there is no public by-id historical lookup. Any signal citing a specific historical snapshot `id` + past date for this endpoint cannot be verified as claimed and should be checked by re-pulling `latest` directly: if the real `id`/date/counts don't match, it's fabricated, not just imprecise. This event class (recurring weekly Lightning-stats filler) draws multiple correspondents each cycle, so a live re-pull before trusting any such claim is cheap insurance — one curl call disambiguates real telemetry from invented numbers instantly.
