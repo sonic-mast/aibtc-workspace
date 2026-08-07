@@ -1,0 +1,54 @@
+# Minimal CI for the Sonic Mast workspace (pattern borrowed from
+# vibewatch-app's ci.yml, scaled down: no app to test, but the loop EXECUTES
+# the scripts and prompt-embedded code in this repo every hour, so syntax
+# breaks and drift are runtime outages, not style problems).
+#
+# Deliberately not path-filtered: the whole suite is a few seconds, and the
+# hourly loop pushes straight to main — the push trigger is the only review
+# any memory/prompt commit gets, so it must always run.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Scripts, patterns, prompt budget
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python syntax (all loop-executed scripts)
+        run: python3 -m py_compile scripts/*.py .claude/hooks/*.py
+
+      - name: Shell syntax
+        run: |
+          for f in scripts/*.sh; do bash -n "$f"; done
+
+      # The in-session hooks fall back to the checked-in JSON on machines
+      # without PyYAML — if it drifts from the YAML source, hooks run stale
+      # rules. Recompile and fail on any difference (vibewatch runs the same
+      # net via its compiler's --check flag).
+      - name: Security patterns drift (yaml == json)
+        run: |
+          pip install pyyaml >/dev/null
+          python3 scripts/compile-security-patterns.py
+          git diff --exit-code .claude/security-patterns.json
+
+      # CLAUDE.md + MEMORY.md + SOUL.md + the combined prompt load into every
+      # hourly run — size growth is a 24x/day token tax. Budgets live in the
+      # script; raise them deliberately, in the same commit, with a reason.
+      - name: Prompt size budget
+        run: bash scripts/check-prompt-size.sh
