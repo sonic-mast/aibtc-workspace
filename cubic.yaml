@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+#
+# cubic (cubic-dev-ai[bot]) is the PR review of record for this repo — the
+# catch layer behind the local gemini-review.py gate (see REVIEW.md, which the
+# custom rule below injects into every review). Free tier is ~20 reviews/mo:
+# the ignore filters keep it off T0 paths (memory, reference dumps) so the
+# quota goes to code.
+
+version: 1
+
+reviews:
+  enabled: true
+  sensitivity: medium
+  incremental_commits: true
+  check_drafts: false
+  # cubic's own intensive-review mode — off: it would burn the free tier, and
+  # the local layers already did the first pass before the PR existed.
+  ultrareview: disabled
+  auto_approve: disabled
+  custom_instructions: |
+    REVIEW.md at the repo root is the review calibration source of truth —
+    severity bar, always-check list, risk tiers, skip paths, nit cap (max 5,
+    lead with "No blocking issues." if that's all you found), and the
+    verification bar: behavior claims need a file:line citation, not
+    inference from naming — downgrade or omit otherwise. This diff already
+    passed a local Gemini gate calibrated by the same file, so don't restate
+    what the code does — hunt for what that single-shot pass misses:
+    cross-file inconsistencies, fabricated contract addresses or API URLs
+    (verify via api.hiro.so before flagging OR trusting), missing wallet
+    safety rails (--confirm gates, postConditionMode deny, post-conditions
+    per transferred token), and prompt-embedded bash/python the hourly loop
+    will execute unattended — review those code blocks as production code
+    with elevated-trust severity (near-certain and severe only).
+  ignore:
+    files:
+      - 'memory/**'
+      - 'MEMORY.md'
+      - 'reference/**'
+      - 'logs/**'
+      - '**/*.lock'
+  custom_rules:
+    - name: Review calibration (REVIEW.md)
+      description: >
+        The file below is this repo's review calibration source of truth.
+        Apply its severity definitions, always-check list, risk tiers, skip
+        paths, and verification bar to every finding.
+      file_paths: [REVIEW.md]
