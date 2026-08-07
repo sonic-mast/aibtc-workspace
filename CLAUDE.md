@@ -8,7 +8,7 @@ The combined loop **runs locally only.** The remote cloud trigger was disabled 2
 
 | Task | Model | Where | Schedule | Purpose |
 |---|---|---|---|---|
-| `aibtc-combined` | sonnet | **Local** Claude Code scheduled task (`aibtc-combined-local`) | `0 * * * *` (hourly, top of the operator's *local* hour, +~6 min jitter) | The loop — inbox, GitHub, news, bounties |
+| `aibtc-combined` | sonnet | **Local** Claude Code scheduled task (`aibtc-combined-local`) | `0 * * * *` (hourly, top of the operator's *local* hour, +~6 min jitter) | The loop — inbox, GitHub, News Legion, bounties |
 | `aibtc-combined` | sonnet | ~~Claude Code remote trigger~~ | **DISABLED 2026-06-07** (`trig_01Cwuup6…`) | Former cloud heartbeat floor; no longer runs |
 | `daily-digest` | opus | **Remote** Claude Code trigger | `0 1 * * *` (01:00 UTC) | Read run logs, send Telegram recap, prune logs |
 | Cloudflare Worker | — | Cloudflare cron | `*/15 * * * *` (every 15 min) | Heartbeat beacon to aibtc.com + state API |
@@ -23,7 +23,7 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state` (C
 - **Write**: `PUT /state` (full replace) or `PATCH /state` (merge)
 - **KV**: `GET/PUT/DELETE /kv/:key`, `POST /kv/:key/append` (atomic array append), `GET /keys`
 
-State includes: heartbeat timestamps, inbox queue, news status/quotas, and the full `codeWork` state machine.
+State includes: heartbeat timestamps, inbox queue, Legion status (`legionStatus` / `legionWeight` / `legionProposeEnabled`), and the full `codeWork` state machine.
 
 ## Prompt files
 
@@ -37,7 +37,8 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 
 - `reference/aibtc.com/llms.txt` — AIBTC platform API
 - `reference/aibtc.com/llms-full.txt` — AIBTC extended docs
-- `reference/aibtc.news/llms.txt` — aibtc.news API (signals, beats, correspondents)
+- `reference/aibtc.news/llms.txt` — aibtc.news News Legion overview (the old signals/beats/correspondents newsroom API was retired 2026-08-03)
+- `reference/aibtc.news/skill.md` — News Legion v6 contract interface (functions, views, error codes)
 - `reference/bff.army/agents.txt` — BFF skills competition rules and format
 
 ## Identity
@@ -68,19 +69,19 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 
 ## MCP Servers
 
-- `aibtc` — AIBTC wallet, signing, DeFi, identity, news tools (`@aibtc/mcp-server@latest`, configured in `.mcp.json`). **Prefer official MCP tools over custom curl** for any news / wallet / identity operation — see the "AIBTC MCP Operations" section in the combined prompt.
+- `aibtc` — AIBTC wallet, signing, DeFi, identity tools (`@aibtc/mcp-server`, installed binary pinned in `.mcp.json`). **Prefer official MCP tools over custom curl** for any wallet / identity / bounty operation — see the "AIBTC MCP Operations" section in the combined prompt. Exception: aibtc.news — the `news_*` tools are 410 Gone and `legion_*` is pinned to the retired v5 contract (aibtc-mcp-server#649); use `GET https://aibtc.news/api/state` + `scripts/testnet-call.py` until #649 ships.
 - `vibewatch` — Agent communication pattern analysis (sentiment, volume, engagement). **Closed beta** — Sonic Mast has access, new operators following the onboarding README do not. The combined prompt falls back to Brave Search, Twitter, and Stacks Forum when vibewatch tools aren't available.
 
 ## Behavior Rules
 
 - No narration in task outputs. One final line per run.
 - Inbox queue must not deadlock: resolve missing sender BTC via `/api/agents/{stxAddress}`; only `blocked_missing_sender_btc` if the agent isn't registered, and drain blocked items by marking read at the start of Phase 2.
-- Quality over volume for news signals.
+- Quality over volume in News Legion governance: vote only on judgments you verified against primary sources; every vote rationale is public and on-chain. Never inscribe/propose unless `legionProposeEnabled: true` in state (proposing costs real mainnet sats).
 - Check before doing — early exit saves tokens.
 - Keep JSON valid: double-quoted keys, no comments, no trailing commas.
 - The combined loop runs **locally only** (remote trigger disabled 2026-06-07) — never defer work to "the next remote run." The wallet is a persisted local keystore unlocked by password; call MCP tools directly (NOT via an Agent sub-task, which can't see the unlocked wallet). `AIBTC_MNEMONIC` is not set locally and is not needed — the seed is recoverable via `wallet_export`. Testnet contract calls run locally via `scripts/testnet-call.py` (see `memory/testnet-local-execution.md`).
 - Never fabricate contract addresses or API URLs. Verify on-chain first.
-- News signal disclosure goes ONLY in the `disclosure` field, never in body text.
+- No autonomous trading: the aibtc.com trading competition stays OFF until the operator approves a strategy (arrives as a state PATCH, not prompt scaffolding).
 - Sync fork main with upstream before every new branch.
-- Default to uncertainty about own history. Before any negative factual claim about self ("not mine", "didn't ship X"), query the live source of truth (GitHub, `news_list_signals`, etc.).
+- Default to uncertainty about own history. Before any negative factual claim about self ("not mine", "didn't ship X"), query the live source of truth (GitHub, `aibtc.news/api/state`, `aibtc.com/api/agents/{stx}/earnings`).
 - Code review runs on Sonic Mast's own accounts: cubic (`cubic-dev-ai[bot]`) on PRs is the review of record, plus the free-tier Gemini pre-push gate. `REVIEW.md` is the calibration SOT. Never invoke operator-billed reviewers (CodeRabbit `/code-review`, ultrareview) on Sonic Mast work — the operator's credits are reserved for his own projects.
