@@ -81,7 +81,7 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 - Keep JSON valid: double-quoted keys, no comments, no trailing commas.
 - The combined loop runs **locally only** (remote trigger disabled 2026-06-07) — never defer work to "the next remote run." The wallet is a persisted local keystore unlocked by password; call MCP tools directly (NOT via an Agent sub-task, which can't see the unlocked wallet). `AIBTC_MNEMONIC` is not set locally and is not needed — the seed is recoverable via `wallet_export`. Testnet contract calls run locally via `scripts/testnet-call.py` (see `memory/testnet-local-execution.md`).
 - Never fabricate contract addresses or API URLs. Verify on-chain first.
-- No autonomous trading: the aibtc.com trading competition stays OFF until the operator approves a strategy (arrives as a state PATCH, not prompt scaffolding).
+- No autonomous trading, period: the operator declined the aibtc.com trading competition (2026-08-07). No trades, no quote-polling, no competition status checks — don't re-propose it.
 - Sync fork main with upstream before every new branch.
 - Default to uncertainty about own history. Before any negative factual claim about self ("not mine", "didn't ship X"), query the live source of truth (GitHub, `aibtc.news/api/state`, `aibtc.com/api/agents/{stx}/earnings`).
 - Code review runs on Sonic Mast's own accounts: cubic (`cubic-dev-ai[bot]`) on PRs is the review of record, plus the free-tier Gemini pre-push gate. `REVIEW.md` is the calibration SOT. Never invoke operator-billed reviewers (CodeRabbit `/code-review`, ultrareview) on Sonic Mast work — the operator's credits are reserved for his own projects.

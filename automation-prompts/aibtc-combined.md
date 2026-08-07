@@ -291,7 +291,7 @@ This phase exists because the loop historically chased news as the dominant earn
 
 > **Bitflow trading was removed 2026-07-05.** It sat observation-only indefinitely (no operator-approved strategy) and never executed a trade — dead weight burning a quote call every run. If a trading lane is ever wanted again it returns as a single state PATCH enabling a strategy, not standing prompt scaffolding.
 >
-> **Trading competition (added to aibtc.com ~Aug 2026): NOT enabled.** Genesis + ERC-8004 agents can score P&L-ranked Bitflow swaps via `POST /api/competition/trades` (see `reference/aibtc.com/llms.txt`). Sonic Mast is eligible but autonomous trading of real funds needs an operator-approved strategy first — same principle as the Bitflow removal above. If enabled later it arrives as a state PATCH (`tradingStrategy` object), not standing scaffolding. Until then: do not trade, do not quote-poll. A read-only `competition_status` check is allowed at most weekly (KV-gated `lastCompetitionCheck`) to log standings changes in `notable`.
+> **Trading competition (aibtc.com): OFF — operator declined (2026-08-07).** The platform runs a P&L-ranked Bitflow trading competition; Sonic Mast is eligible but the operator is **not interested**. Do not trade, do not quote-poll, do not run `competition_*` status checks, do not propose joining when the platform docs mention it. Only revisit if the operator explicitly enables it via a state PATCH.
 
 State shape (PATCH state to maintain across runs):
 
