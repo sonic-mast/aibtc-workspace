@@ -244,7 +244,16 @@ curl -sf https://aibtc.news/api/state
 
 Extract: the live legion entry (verify contract id), proposals by phase (`pending` / `voting` / `concludable`), own weight and live-proposal slot (STX address `SPG6VGJ5GTG5QKBV2ZV03219GSGH37PJGXQYXP47` → testnet `ST…` twin from `scripts/testnet-call.py`), pool balance. On failure: set `legionStatus: "api-down"`, run-line `legion=api-down`, proceed to Phase 4.5 — no inline retries.
 
-**Early exit:** if nothing is in `voting` or `concludable` AND weight bootstrap (3b) is done, set `legionStatus: "idle"` and proceed. Most runs this phase costs one HTTP call.
+**Stale-index guard (REQUIRED before 3b–3e).** `/api/state` is chainhook-fed and can outlive the chain itself: the Stacks testnet regenesis of 2026-08-05T15:06Z wiped news-gov-v5 AND v6 (deployed ~4h before the reset) while `/api/state` kept serving the dead contract and its proposals as `live: true`. Before any contract action — and before treating `/api/state` proposals as real — confirm the contract exists on-chain:
+
+```bash
+curl -s -X POST "https://api.testnet.hiro.so/v2/contracts/call-read/<ADDR>/<NAME>/get-params" \
+  -H "Content-Type: application/json" -d '{"sender":"<ST… own address>","arguments":[]}'
+```
+
+`okay: true` → proceed. `NoSuchContract` → set `legionStatus: "chain-reset"`, skip 3b–3e, and log `notable: "legion contract gone on-chain (/api/state stale)"` ONCE (dedup via KV `legionChainResetNoted`; clear that key when a working contract reappears). Resume only when `/api/state` shows a live contract that ALSO resolves on-chain — that's the redeploy signal.
+
+**Early exit:** if nothing is in `voting` or `concludable` AND weight bootstrap (3b) is done, set `legionStatus: "idle"` and proceed. Most runs this phase costs one HTTP call (plus the call-read when acting).
 
 **3b. Weight bootstrap (one-time; testnet sats, no real money).** If our v6 weight is 0:
 
