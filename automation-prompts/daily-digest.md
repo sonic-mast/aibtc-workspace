@@ -15,7 +15,7 @@ YESTERDAY=$(date -u -d "yesterday" +%Y-%m-%d 2>/dev/null || date -u -v-1d +%Y-%m
 curl -sf "https://sonic-mast-state.brandonmarshall.workers.dev/kv/runlog-$YESTERDAY" \
   -H "Authorization: Bearer $STATE_API_TOKEN"
 
-# Current state (for streak, signal count, code work status)
+# Current state (for Legion status, bounty pipeline, code work status)
 curl -sf "https://sonic-mast-state.brandonmarshall.workers.dev/state" \
   -H "Authorization: Bearer $STATE_API_TOKEN"
 
@@ -36,12 +36,11 @@ If the run log key is empty or missing, send: "No runs logged for {date}." and e
 
 Scan all run entries and extract what matters. **Filter aggressively** — the operator does not want noise.
 
-**Lead with the active earning lane.** While signal payouts are frozen, news is NOT the primary lane — bounties are. (Bitflow trading was removed from the loop 2026-07-05; there is no trading lane and no trading fields to expect in run logs.) Open the recap with bounty pipeline state (how many in flight, and any drafted / building / submitted / won). Treat capped-news and idle news runs as expected background, not the headline.
+**Lead with the active earning lane.** The aibtc.news newsroom was retired 2026-08-03 — the loop now participates in the News Legion (on-chain testnet governance: votes, concludes, and — only if operator-enabled — proposals). The Legion is testnet-denominated, so bounties remain the real-sats lane. (Bitflow trading was removed 2026-07-05 and the aibtc.com trading competition is NOT enabled — no trading fields to expect in run logs.) Open the recap with bounty pipeline state (how many in flight, and any drafted / building / submitted / won). Treat idle Legion runs as expected background, not the headline.
 
 **Always include:**
 - Bounty pipeline: count in flight, plus any new draft, submission, win, or stale-drop (from `bounty:` / `notable` run-log fields)
-- Signals filed: beat, headline, and whether approved/rejected/pending
-- Rejection reasons (group by reason if multiple)
+- Legion activity: votes cast (`legion:` / `legionDetail:` fields — proposal id, support, rationale gist), concludes, weight bootstrap, and any piece proposed or passed
 - PR status changes (new PR, review round, approved, merged)
 - Errors or timeouts
 - Earnings or payments received
@@ -49,23 +48,23 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 
 **Skip entirely:**
 - Heartbeat-only runs with no actions
-- "Brief full, skipped" / `news=maxed` — under EIC pause the 1/day news cap is expected; never list it as the day's headline or as a problem
+- `legion=idle` runs — no live proposals to vote on is the normal case; never the day's headline
 - Normal cooldown cycles
 
 **Known chronic conditions — acknowledge once, then suppress.** Some conditions are persistent and already known to the operator. For each, report it ONLY when it first appears or its status changes; otherwise omit it entirely. Track them in the `digest-acked-conditions` KV map:
-- `eic-paused` — EIC funding paused (news earns $0, 1/day cap). Already acknowledged; mention only if EIC *resumes* (look for `notable: "EIC resumed..."`).
-- `news-capped-daily` — news hit its daily cap. Expected while payouts are frozen; suppress.
+- `legion-mcp-v5-stale` — `legion_*` MCP tools pinned to dead v5 contract (aibtc-mcp-server#649). Already known; mention only when it's fixed (loop logs a `notable` about the re-probe succeeding).
+- `legion-propose-disabled` — proposing is operator-gated off. Expected; suppress unless the loop logs a strong piece candidate in `notable` (surface those — they're the operator's cue to enable).
 
 For any condition you DO report (first sighting or a status change), PATCH `digest-acked-conditions` to record it: `curl -sf -X PATCH ".../kv/digest-acked-conditions" -H "Authorization: Bearer $STATE_API_TOKEN" -d '{"<key>":{"reportedAt":"<iso>","state":"<active|resolved>"}}'`. When a condition resolves (e.g. payouts unfreeze), report the change and update its entry.
 
 **After summarizing, diagnose and recommend NEW or worsening problems only.** Look for:
-- Recurring rejection patterns (same reason 2+ times = something to fix in the prompt or strategy)
+- Repeated Legion write failures (same contract error 2+ times = something to fix in the prompt or the testnet-call script)
 - Stale PRs / stale bounties (review or build rounds stacking up with no progress)
 - Bounty lane starvation (pipeline empty for the whole day despite open, fit-score ≥3 bounties on `bounty_list`)
 - Anything that's getting worse compared to the prior day
 - **BFF #544 winner mention**: if any run-log entry's `notable` mentions a `DAY {N} Winner: PR #544` line from agents.txt, lead with it.
 
-**Do NOT recommend reducing the trigger frequency.** Idle news runs are expected while payouts are frozen — the loop's job has shifted to bounties, which need the runs. If the loop looks idle, the fix is more bounty throughput, not fewer runs.
+**Do NOT recommend reducing the trigger frequency.** Idle Legion runs are expected — the loop's real-sats job is bounties, which need the runs. If the loop looks idle, the fix is more bounty throughput, not fewer runs.
 
 **Do NOT recommend remote-environment fixes.** The combined loop is local-only (remote trigger disabled 2026-06-07). Never surface "needs a remote run", "set `AIBTC_MNEMONIC` in the remote env", or similar as an action item — there is no remote combined run. Testnet contract work runs locally via `scripts/testnet-call.py`. If a run-log `blockedReason` says `requires-remote-*`, treat it as a stale/buggy state to flag for fixing, not as a real operator action.
 
