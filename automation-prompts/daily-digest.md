@@ -54,6 +54,7 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 **Known chronic conditions — acknowledge once, then suppress.** Some conditions are persistent and already known to the operator. For each, report it ONLY when it first appears or its status changes; otherwise omit it entirely. Track them in the `digest-acked-conditions` KV map:
 - `legion-mcp-v5-stale` — `legion_*` MCP tools pinned to dead v5 contract (aibtc-mcp-server#649). Already known; mention only when it's fixed (loop logs a `notable` about the re-probe succeeding).
 - `legion-propose-disabled` — proposing is operator-gated off. Expected; suppress unless the loop logs a strong piece candidate in `notable` (surface those — they're the operator's cue to enable).
+- `legion-chain-reset` — testnet regenesis (2026-08-05) destroyed the Legion contracts; `legion=chain-reset` runs are expected and NOT a problem. Operator already knows. Report ONLY the recovery: the run where the loop logs a redeployed contract resolving on-chain (that's headline material — the loop will bootstrap and start participating).
 
 For any condition you DO report (first sighting or a status change), PATCH `digest-acked-conditions` to record it: `curl -sf -X PATCH ".../kv/digest-acked-conditions" -H "Authorization: Bearer $STATE_API_TOKEN" -d '{"<key>":{"reportedAt":"<iso>","state":"<active|resolved>"}}'`. When a condition resolves (e.g. payouts unfreeze), report the change and update its entry.
 
