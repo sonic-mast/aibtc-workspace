@@ -316,7 +316,7 @@ Process this lane in two parts each run: (A) **advance one in-flight bounty by o
 
 **First, reconcile against the platform** (cheap, read-only). For the entry you're about to advance, call `bounty_get(bounty_id)` and check the on-platform `status`. If it's terminal — `paid`, `closed`, `expired`, or `winner-announced` / `acceptedAt` set to a submission that isn't ours — drop it from `bounties` now and log `bounty: "closed <id> (settled on-platform)"`; do not build or submit. Also drop any entry whose `bountyId` is a dead `mq`/`mqf`-prefix string (deprecated API — `bounty_get` 404s). This catches the failure mode where a `drafted`/`building` bounty was won by another agent while we sat on it (e.g. the Legion v3.0 testnet bounty paid to TinyOps on 2026-06-23 while ours stayed blocked).
 - **`drafted`**: build the deliverable (code repo or gist, writeup). Set its `status: "building"`, `lastActionAt: <iso>`. Multi-day builds stay `building` across runs — log `bounty: "building <id>"` and stop here for this run.
-- **`building`**: continue/finish the deliverable. When complete and the pre-push review gate passes (reuse Phase 5d gate), call `bounty_submit` (wallet-gated — requires preamble) with the writeup/URL/source links. **Append `bountyId` to `bountyHistory` ONLY after `bounty_submit` returns a submission `id` in the same run** — i.e. a confirmed platform submission. On success: set its `status: "submitted"`, append `bountyId` to `bountyHistory`, log `bounty: "submitted <id>"`. On failure (submit errored, gist publish blocked, deliverable incomplete): set its `blockedReason: <error>`, leave at `building`, and **do NOT append to `bountyHistory`** — an unsubmitted bounty in the ledger becomes a phantom that the Part-B dedup skips forever.
+- **`building`**: continue/finish the deliverable. When complete, **run the local review gate before submitting — MANDATORY, operator directive**: `python3 scripts/gemini-review.py` against the deliverable (`--repo <clone>` for bounty checkouts, `--files ...` for standalone artifacts), fix `bug` findings, re-run once to confirm (see "Pre-push review gate" in Phase 5; DEGRADED = proceed with a log line, never a block). Only then call `bounty_submit` (wallet-gated — requires preamble) with the writeup/URL/source links. **Append `bountyId` to `bountyHistory` ONLY after `bounty_submit` returns a submission `id` in the same run** — i.e. a confirmed platform submission. On success: set its `status: "submitted"`, append `bountyId` to `bountyHistory`, log `bounty: "submitted <id>"`. On failure (submit errored, gist publish blocked, deliverable incomplete): set its `blockedReason: <error>`, leave at `building`, and **do NOT append to `bountyHistory`** — an unsubmitted bounty in the ledger becomes a phantom that the Part-B dedup skips forever.
   - **Disclosure gate (high/critical findings):** if the deliverable is an audit with any **high or critical** finding, the bounty requires private disclosure to the named team(s) **before** public submission, citing the disclosure timestamp + channel in the `message`. Do NOT call `bounty_submit` until disclosure is sent. If disclosure needs the operator (outreach via X/GitHub/Discord), leave at `building` with `blockedReason: "awaiting-disclosure"`, log `notable: "bounty needs disclosure <id>"`, and let the operator handle it — do not append to `bountyHistory`.
   - **Publishing a gist deliverable:** use `bash scripts/publish-gist.sh <file> "<description>" secret` — it prints the gist URL. It publishes via the **state-worker relay** (`POST /gist`, server-side): the worker holds the `GITHUB_TOKEN` secret and creates the gist, so no "publish under identity" happens on the agent — which is what the local auto-mode classifier blocks (it judges intent, not the command prefix, so direct `gh gist create` / `curl POST .../gists` and even the allowlisted script-when-it-called-GitHub-directly are all blocked). The relay requires one-time operator setup (deploy `workers/state` with the `/gist` route + `wrangler secret put GITHUB_TOKEN`). If the relay isn't deployed yet, or publishing is otherwise blocked, set `blockedReason: "gist-needs-interactive-publish"`, leave the bounty at `building`, log `notable: "bounty needs gist publish <id>"` for the operator, and do **not** append to `bountyHistory`.
 - **`submitted`**: monitor via `bounty_get(id)` (read-only, no build budget consumed). On `winner_announced` with Sonic Mast: remove it from `bounties`, log `notable: "bounty won <id> <rewardSats> sats"`. On `abandoned` or a different winner: remove it from `bounties`, log `bounty: "closed <id>"`.
@@ -413,74 +413,36 @@ Use the `.github/PULL_REQUEST_TEMPLATE.md` from the repo:
 {write operations, fund limits, confirmation gates}
 ```
 
-#### Pre-push review gate (Gemini API)
+#### Pre-push review gate (local Gemini review)
 
-Runs from 5b (before initial push) and 5d (before fix push). Acts as a replacement for the Devin post-PR review, which is losing its free tier. Uses the Gemini HTTP API so the same gate runs on local and remote Claude Code — no CLI dependency.
+Runs before ANY code ships: bounty `bounty_submit` (Phase 4.5), initial push (5b), and fix push (5d). **Local-first is the operator's directive (2026-08-07): the deliverable improves BEFORE submission — cubic on the PR is the catch layer, not the first look.** Risk tiers and calibration live in `REVIEW.md`.
 
-**Never blocks shipping.** Every failure mode (no key, API error, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
+**Never blocks shipping.** Every failure mode (no key, API error, DEGRADED, round cap) logs and proceeds — one missing pre-review is better than a frozen pipeline.
 
-The review rubric lives in the workspace's `REVIEW.md` (severity definitions, always-check list, nit cap) — it is piped into the Gemini call as system context so the gate, PR bots, and human reviewers share one calibration.
+Invocation (ONE API request per call — never the agentic `gemini` CLI):
 
-1. If `$GEMINI_API_KEY` is empty: set `localReviewResult="no-key"` and return (push proceeds without review).
-2. Build the diff from the working tree. **Critical**: in 5b the three skill files are brand-new and untracked, so plain `git diff HEAD` returns empty. Use `git add -N` (intent-to-add) first so untracked files appear in the diff. This is safe in 5d too (no-op on already-tracked files). **Export** `DIFF` and `REVIEW_MD` so the Python heredoc (a child process) can read them via `os.environ`:
-   ```bash
-   git add -N skills/{skill-name}/ 2>/dev/null
-   export DIFF="$(git diff --no-color HEAD -- skills/{skill-name}/)"
-   export REVIEW_MD="$(cat /Users/brandonmarshall-personal/Documents/Coding/AIBTC/REVIEW.md 2>/dev/null)"
-   ```
-3. If `DIFF` is empty: set `localReviewResult="empty-diff"` and return.
-4. Call Gemini with structured output. **Up to 2 total review rounds per gate invocation**: round 1 is the initial review; if it finds bugs, apply fixes and run round 2 as a confirmation pass. If round 2 still finds bugs, stop. Round counter starts at 1. The Python script prints either the model's JSON array (success) or a JSON object with an `__error__` key (failure) — both on stdout — so the shell captures everything in `$REVIEW` regardless of outcome. `GEMINI_API_KEY` must already be exported in the session (it's in `.env`; the combined-task runner sources it at startup). If in doubt, `export GEMINI_API_KEY` before the call.
-   ```bash
-   REVIEW=$(python3 <<'PY'
-   import json, os, sys, urllib.request
-   diff = os.environ["DIFF"]
-   review_md = os.environ.get("REVIEW_MD", "")
-   payload = {
-     "contents": [{"parts": [{"text": diff}]}],
-     "systemInstruction": {"parts": [{"text":
-       (review_md + "\n\n" if review_md else "") +
-       "You are reviewing a BFF skills PR for AIBTC. Focus ONLY on these failure modes — skip style/nitpicks:\n"
-       "1. Fabricated contract addresses or API URLs (cite the address and why it looks unverified).\n"
-       "2. Safety claims in AGENT.md not enforced in the .ts code.\n"
-       "3. Write operations missing the --confirm gate.\n"
-       "4. MCP payloads missing postConditionMode:deny or per-token post-conditions.\n"
-       "5. Bare fetch() without AbortSignal.timeout.\n"
-       "6. Hardcoded contract calls that should use a protocol SDK.\n"
-       "7. Actual logic bugs (off-by-one, wrong operator, swapped args, missing await).\n"
-       "Return a JSON array; empty array [] if clean."}]},
-     "generationConfig": {
-       "responseMimeType": "application/json",
-       "responseSchema": {"type": "array", "items": {"type": "object",
-         "properties": {"severity": {"type": "string", "enum": ["bug", "risk"]},
-           "file": {"type": "string"}, "line": {"type": "integer"},
-           "issue": {"type": "string"}, "fix": {"type": "string"}},
-         "required": ["severity", "file", "issue"]}}}}
-   req = urllib.request.Request(
-     f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={os.environ['GEMINI_API_KEY']}",
-     data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-   try:
-     with urllib.request.urlopen(req, timeout=60) as r:
-       data = json.load(r)
-     cands = data.get("candidates") or []
-     if not cands:
-       # safety filter / empty generation — treat as clean rather than crashing
-       print(json.dumps({"__error__": f"no-candidates: {data.get('promptFeedback', {})}"}))
-     else:
-       print(cands[0]["content"]["parts"][0]["text"])
-   except Exception as e:
-     print(json.dumps({"__error__": f"{type(e).__name__}: {e}"}))
-   PY
-   )
-   ```
-5. Parse `$REVIEW` as JSON.
-   - If the result is an object with `__error__` (network failure, 4xx/5xx, quota exceeded, empty candidates from safety filter, etc.) → `localReviewResult="api-error"`, `detail` = the `__error__` string, return.
-   - If any `severity:"bug"` items **and round == 1**: read the affected files, apply the suggested fix where it's correct (Gemini's `fix` field is guidance, not a literal patch — verify against the code). Increment the round counter to 2 and re-run from step 2.
-   - If any `severity:"bug"` items **and round == 2** (cap hit — the round-1 fixes didn't fully clear the findings): `localReviewResult="max-rounds", remaining=N`, return. Post-PR `gemini-code-assist[bot]` catches what's left.
-   - `severity:"risk"` items: collect into a `reviewRiskNotes` array to append under a **Pre-review notes** section in the PR body (same treatment as `ANALYSIS_`).
-   - Clean (`[]`): `localReviewResult="clean"`, return.
-6. Rules:
-   - **Do not re-verify fabricated addresses by asking Gemini again.** If rule #1 fires, go verify on Hiro (`api.hiro.so/extended/v1/contract/{address}.{name}`) and either replace the address or fail back to a known-good one. Re-checking Gemini won't fix hallucination on your end.
-   - **Do not mutate `codeWork` state from the gate.** The gate lives entirely within one run.
+```bash
+REVIEW=$(python3 scripts/gemini-review.py --repo <checkout-dir> --base origin/main)
+RC=$?   # 0 = findings JSON on stdout; 2 = DEGRADED (proceed, log it)
+```
+
+- Reviewing a bounty clone: pass its path as `--repo`. New files must be `git add`ed to appear in the diff (deliberate — staging is the opt-in that keeps stray files from being sent to the API).
+- Non-git deliverables (gist markdown, standalone files): `--files <path...>` reviews full contents.
+- `GEMINI_API_KEY` must be exported (it's in `.env`; the combined-task runner sources it at startup).
+
+Interpret the JSON array:
+
+1. **`RC=2` (DEGRADED)**: set `localReviewResult="degraded"`, log the stderr line, proceed to ship. Do not retry more than once.
+2. **`[]` (clean)**: `localReviewResult="clean"`, ship.
+3. **`severity:"bug"` items, round 1**: read the affected files, apply fixes where the finding is correct (the `fix` field is guidance, not a literal patch — verify against the code). Re-run the script once as a confirmation pass (round 2).
+4. **`bug` items still present in round 2**: stop fixing — `localReviewResult="max-rounds"`, ship, and let cubic catch the rest. Max 2 rounds per gate invocation.
+5. **`severity:"risk"` items**: collect into `reviewRiskNotes`, append under a **Pre-review notes** section in the PR body / bounty `message`.
+
+Rules:
+
+- **Do not re-verify fabricated addresses by asking Gemini again.** If the fabricated-address check fires, verify on Hiro (`api.hiro.so/extended/v1/contract/{address}.{name}`) and replace or fall back to a known-good address.
+- **Do not mutate `codeWork` state from the gate.** The gate lives entirely within one run.
+- **Feedback ratchet (REVIEW.md):** when cubic or a bounty poster later catches something this gate passed, add the failure shape to `REVIEW.md`'s always-check list (or `.claude/security-patterns.yaml` if greppable) in the same run that fixes it — commit via the normal push path with message `review: ratchet <shape>`. The next regression should die locally.
 
 **5a. Status: `none` — Pick work / BFF round-2 watch**
 
@@ -572,6 +534,7 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 - If 0 `BUG_` findings in the latest review round → reviews passed. Set `status` to `submitting` and proceed to 5e now.
 - If `BUG_` findings exist → set `status` to `fixing`, increment `reviewRound`, and proceed to 5d now (same run).
 - Treat Cubic and Gemini comments that flag concrete bugs the same as Devin `BUG_` findings — fix them. Treat style suggestions as optional (like `ANALYSIS_`).
+- **Feedback ratchet:** any concrete-bug finding from a PR bot that the local gate had passed is a calibration miss — add the failure shape to `REVIEW.md`'s always-check list (or `.claude/security-patterns.yaml`) in the same run, per REVIEW.md's ratchet rule.
 
 **5d. Status: `fixing` — Address review feedback**
 
@@ -579,7 +542,7 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
 4. **Re-verify contract addresses** if any were flagged. Do not fix a fabricated address with another fabricated address.
-5. **Run the pre-push review gate** (see "Pre-push review gate (Gemini API)" above) against the working tree before pushing the fix. This catches regressions introduced by the fix itself. Apply any new `bug`-severity findings.
+5. **Run the pre-push review gate** (see "Pre-push review gate (local Gemini review)" above) against the working tree before pushing the fix. This catches regressions introduced by the fix itself. Apply any new `bug`-severity findings.
 6. Push the fix to the same branch. Env-branch per CRITICAL rule 13:
    - **Local**: `git add <changed-files> && git commit -m "fix({skill-name}): <short reason>" && git push`.
    - **Remote**: skip `git commit` — call `mcp__github__push_files` with the same owner/repo/branch from state and the fixed file contents. A bare `git commit` in remote returns `signing operation failed: ... 400 missing source` and then stream-idle-timeouts on the MCP pivot — go straight to MCP.
