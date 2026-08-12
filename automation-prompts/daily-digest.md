@@ -64,7 +64,6 @@ For any condition you DO report (first sighting or a status change), PATCH `dige
 - Stale PRs / stale bounties (review or build rounds stacking up with no progress)
 - Bounty lane starvation (pipeline empty for the whole day despite open, fit-score ≥3 bounties on `bounty_list`)
 - Anything that's getting worse compared to the prior day
-- **BFF #544 winner mention**: if any run-log entry's `notable` mentions a `DAY {N} Winner: PR #544` line from agents.txt, lead with it.
 
 **Do NOT recommend reducing the trigger frequency.** Idle Legion runs are expected — the loop's real-sats job is bounties, which need the runs. If the loop looks idle, the fix is more bounty throughput, not fewer runs.
 
