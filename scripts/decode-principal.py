@@ -55,10 +55,17 @@ def decode(hexstr: str) -> str:
     kind = raw[0]
     if kind not in (0x05, 0x06):
         raise ValueError(f"not a principal (leading byte 0x{kind:02x})")
+    # Python slices don't raise on a too-short buffer — raw[2:22] silently
+    # returns fewer than 20 bytes, which c32check would then hash into a
+    # valid-looking but wrong address instead of failing loudly.
+    if len(raw) < 22:
+        raise ValueError(f"truncated principal ({len(raw)} bytes)")
     version, hash160 = raw[1], raw[2:22]
     address = c32check(version, hash160)
     if kind == 0x05:
         return address
+    if len(raw) < 23:
+        raise ValueError("truncated contract name length")
     name_len = raw[22]
     name = raw[23 : 23 + name_len].decode("ascii")
     if len(name) != name_len:
@@ -70,6 +77,8 @@ def decode(hexstr: str) -> str:
 # contract name to a real address is exactly the fabrication REVIEW.md check 1
 # forbids). The first three encode to 40-char addresses — the short case a
 # fixed-width pad silently corrupts, which is what made this decoder wrong.
+# The last two wrap the first vector's real bytes in (some …) / (ok (some …))
+# tags — no invented address material, just the unwrap loop exercised twice.
 SELFTEST = [
     ("0x051625e7097721a3a3f32a2af0ae3c59682253389f1a", "SPJYE2BQ46HT7WSA5BRAWF2SD0H56E4Z3BJ103P9"),
     ("0x051602e646242d96074700956359f26018b7a70dd92c", "SP1ECHH45PB0EHR0JNHNKWK032VTE3ES5HWCN85D"),
@@ -81,6 +90,25 @@ SELFTEST = [
         "0x061ab750c0ce5f6d4a2a53667c18e0a0f5d9b7e666440a736274632d746f6b656e",
         "ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.sbtc-token",
     ),
+    ("0x0a051625e7097721a3a3f32a2af0ae3c59682253389f1a", "SPJYE2BQ46HT7WSA5BRAWF2SD0H56E4Z3BJ103P9"),
+    ("0x070a051625e7097721a3a3f32a2af0ae3c59682253389f1a", "SPJYE2BQ46HT7WSA5BRAWF2SD0H56E4Z3BJ103P9"),
+]
+
+# c32encode boundary cases, checked directly rather than through a full
+# address round-trip: one leading zero byte (pad=1), no leading zero byte
+# (pad=0), and the empty-input edge (n=0, out="").
+C32ENCODE_SELFTEST = [
+    (b"\x00\x01", "01"),
+    (b"\x01\x00", "80"),
+    (b"\x00\x00", "00"),
+]
+
+# Malformed/minimal inputs that must raise rather than silently decode to a
+# wrong-but-plausible-looking address.
+FAIL_SELFTEST = [
+    ("0x08", "err"),
+    ("0x04aa", "not a principal"),
+    ("0x0511", ""),  # truncated hash160 — too short to slice, must raise
 ]
 
 
@@ -94,7 +122,22 @@ def selftest() -> int:
         if got != expected:
             failed += 1
             print(f"FAIL {hexstr[:24]}…\n  want {expected}\n  got  {got}", file=sys.stderr)
-    print(f"selftest: {len(SELFTEST) - failed}/{len(SELFTEST)} passed")
+    for data, expected in C32ENCODE_SELFTEST:
+        got = c32encode(data)
+        if got != expected:
+            failed += 1
+            print(f"FAIL c32encode({data!r})\n  want {expected}\n  got  {got}", file=sys.stderr)
+    for hexstr, needle in FAIL_SELFTEST:
+        try:
+            got = decode(hexstr)
+            failed += 1
+            print(f"FAIL {hexstr} expected to raise, got {got}", file=sys.stderr)
+        except (ValueError, IndexError) as exc:
+            if needle and needle not in str(exc):
+                failed += 1
+                print(f"FAIL {hexstr} raised {exc!r}, expected to mention {needle!r}", file=sys.stderr)
+    total = len(SELFTEST) + len(C32ENCODE_SELFTEST) + len(FAIL_SELFTEST)
+    print(f"selftest: {total - failed}/{total} passed")
     return 1 if failed else 0
 
 
