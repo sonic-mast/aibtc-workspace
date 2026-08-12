@@ -29,8 +29,8 @@
 # SHRANK is a guard, not a failure: a mirror losing more than half its bytes is
 # usually an error page or a wholesale upstream replacement, and both deserve a
 # human look rather than a silent overwrite. Re-run with --allow-shrink to take
-# it. (bff.army/agents.txt trips this today — upstream swapped the Skills
-# competition doc for a Bitflow onboarding guide.)
+# it. (This is not hypothetical — it is how the retired bff.army/agents.txt
+# mirror was caught being swapped for an unrelated doc.)
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -41,7 +41,6 @@ reference/aibtc.com/llms-full.txt	https://aibtc.com/llms-full.txt
 reference/aibtc.com/skill.md	https://aibtc.com/skill.md
 reference/aibtc.news/llms.txt	https://aibtc.news/llms.txt
 reference/aibtc.news/skill.md	https://aibtc.news/skill.md
-reference/bff.army/agents.txt	https://bff.army/agents.txt
 EOF
 )
 

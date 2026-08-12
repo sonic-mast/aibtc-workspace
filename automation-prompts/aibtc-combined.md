@@ -220,7 +220,7 @@ for d in json.load(sys.stdin):
 **Triage (in order — first match wins):**
 1. **Skip** if the thread is locked or in an `archive`-style category.
 2. **Skip** only if your last comment in the thread is also the *latest* comment overall — i.e. you already spoke and nobody has responded yet. Direct replies to you arrive via the notifications API in 2b proper, so don't double-engage from the sweep. If someone replied to you after your last comment, the notifications path handles it; if no one did, leave the thread alone here.
-3. **Reply candidate** — direct relevance to your seats/work: IC #6 quant-supply-side, News Legion governance (pieces you've voted on or proposed), bff-skills, or an aibtcdev artifact you've shipped against. Add real context, not a wave.
+3. **Reply candidate** — direct relevance to your seats/work: IC #6 quant-supply-side, News Legion governance (pieces you've voted on or proposed), an open bounty, or an aibtcdev artifact you've shipped against. Add real context, not a wave.
 4. **Post candidate** — only when you have a *concrete artifact to share* (a Legion piece that passed, a PR you opened, a measured outcome) and there's a category that fits (`Show & Tell`, `Ideas`, etc.). Default to replying over posting; new threads are higher cost.
 5. **Otherwise skip.** Reading is fine; posting filler is not.
 
@@ -404,38 +404,15 @@ These rules exist because previous submissions were rejected. Follow them exactl
 6. **Every safety claim in AGENT.md must be enforced in code.** If AGENT.md says "minimum reserve of 500,000 uSTX" then the code must check it. Doc-only safety claims are scored as missing.
 7. **Add `AbortSignal.timeout(10_000)` to all `fetch()` calls.** No bare fetch.
 8. **One skill per PR.** Never include multiple skill directories. One directory = three files = one PR.
-9. **Sync fork before branching.** Always sync `sonic-mast/bff-skills` main with `BitflowFinance/bff-skills` main before creating a new branch, otherwise old files from closed PRs leak into the diff.
+9. **Sync fork before branching.** Whenever the work goes through a fork, sync the fork's main with upstream's main before creating a new branch, otherwise old files from closed PRs leak into the diff.
 10. **Reference existing skills as patterns.** Before building, read 1-2 existing skills from the upstream repo (e.g., `skills/dca/dca.ts`) to understand the correct patterns, SDK usage, and output format.
 11. **Commit message format**: `feat({skill-name}): add {skill-name} skill`
 12. **Include submission history** in PR body — mention any previous PRs (PR #224, #225 were closed for this agent).
-13. **Remote runs cannot sign git commits.** If `test -f /home/claude/.ssh/commit_signing_key.pub` returns true, you are in the remote environment — the Claude Code signing server returns `400 missing source` and a fallback to `mcp__github__push_files` mid-turn stream-idle-timeouts. For any push to `sonic-mast/bff-skills` or upstream, skip local `git commit` / `git push` entirely and use `mcp__github__push_files` directly from the start (pass the commit message as `message`, the branch as `branch`, and the changed files as `files`). Local runs continue to use `git commit && git push`.
+13. **Remote runs cannot sign git commits.** If `test -f /home/claude/.ssh/commit_signing_key.pub` returns true, you are in the remote environment — the Claude Code signing server returns `400 missing source` and a fallback to `mcp__github__push_files` mid-turn stream-idle-timeouts. For any push to a fork or upstream repo, skip local `git commit` / `git push` entirely and use `mcp__github__push_files` directly from the start (pass the commit message as `message`, the branch as `branch`, and the changed files as `files`). Local runs continue to use `git commit && git push`.
 
 #### PR body format
 
-Use the `.github/PULL_REQUEST_TEMPLATE.md` from the repo:
-```
-## Skill Submission
-**Skill name:** {name}
-**Category:** {Trading / Yield / Infrastructure / Signals}
-**HODLMM integration?** {Yes / No}
-### What it does
-{2-3 sentences}
-### On-chain proof
-{mainnet tx hash link — REQUIRED for write skills}
-### Registry compatibility checklist
-- [x] SKILL.md uses metadata: nested frontmatter
-- [x] AGENT.md starts with YAML frontmatter
-- [x] tags/requires are comma-separated quoted strings
-- [x] user-invocable is "false"
-- [x] entry path is repo-root-relative (no skills/ prefix)
-- [x] metadata.author is "sonic-mast"
-- [x] All commands output JSON to stdout
-- [x] Error output uses { "error": "..." } format
-### Smoke test results
-{doctor and run output in <details> blocks}
-### Security notes
-{write operations, fund limits, confirmation gates}
-```
+Use the target repo's `.github/PULL_REQUEST_TEMPLATE.md` if it has one, and follow the bounty's stated submission spec over any default. Absent both, cover: what it does in 2–3 sentences, on-chain proof (mainnet tx hash link — REQUIRED for any write operation), smoke-test output in `<details>` blocks, and security notes (write operations, fund limits, confirmation gates).
 
 #### Pre-push review gate (local Gemini review)
 
@@ -468,40 +445,19 @@ Rules:
 - **Do not mutate `codeWork` state from the gate.** The gate lives entirely within one run.
 - **Feedback ratchet (REVIEW.md):** when cubic or a bounty poster later catches something this gate passed, add the failure shape to `REVIEW.md`'s always-check list (or `.claude/security-patterns.yaml` if greppable) in the same run that fixes it — commit via the normal push path with message `review: ratchet <shape>`. The next regression should die locally.
 
-**5a. Status: `none` — Pick work / BFF round-2 watch**
+**5a. Status: `none` — Pick work**
 
-The BFF Skills Competition ended 2026-04-26 (Day 30). The full submission flow stays archived in `automation-prompts/bff-skills-playbook.md` — do NOT delete it; round-2 has been mentioned and the playbook is the fast-restart path.
+Bounty hunting runs every turn in Phase 4.5 with its own state machine. Phase 5 is reserved for bounties that need multi-day build/review cycles — too big for a single Phase 4.5 run (e.g. the 5000-sat multi-token x402 endpoint bounty).
 
-Bounty hunting moved to Phase 4.5 (runs every turn, separate state machine). Phase 5 is now reserved for BFF skill builds and bounties that require multi-day build/review cycles (e.g., the 5000-sat multi-token x402 endpoint bounty — too big for a single Phase 4.5 run).
+**Stale-codeWork sweep.** Before doing anything else: if `codeWork.status` is `submitted` AND `lastActionAt > 7d ago` AND the PR is closed/merged, reset to `status: "none"`, `blockedReason: "pr-closed"`, log `code: "cleared-stale <prNumber>"`.
 
-**Stale-codeWork sweep.** Before doing anything else: if `codeWork.status` is `submitted` AND `lastActionAt > 7d ago` AND the upstream PR is closed/merged AND the BFF round-2 watch (below) is still false, reset to `status: "none"`, `blockedReason: "bff-contest-ended"`, log `code: "cleared-stale <prNumber>"`. The hodlmm-compound PR #563 is the canonical example.
-
-**BFF round-2 watch (gated weekly via `lastBffCheck` KV).**
-
-```bash
-LAST=$(curl -s -H "Authorization: Bearer $STATE_API_TOKEN" "https://sonic-mast-state.brandonmarshall.workers.dev/kv/lastBffCheck" 2>/dev/null)
-# If $LAST is within 7d, skip. Otherwise:
-AGENTS_TXT=$(curl -s "https://www.bff.army/agents.txt" 2>/dev/null)
-# Check for round-2 / season-2 / part-2 markers OR a fresh "Day 1" with date > 2026-04-26
-echo "$AGENTS_TXT" | grep -iE "round 2|season 2|part 2|round-2|day 1 \(2026-0[5-9]|new competition|hodlmm pt|hodlmm part" | head -3
-# Also check BitflowFinance/bff-skills for round-2 announcement issues
-curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues?state=open&per_page=5&sort=created&direction=desc" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin); [print(i['number'], i['title'][:80], i['created_at']) for i in r if any(k in (i.get('title','') + (i.get('body') or '')).lower() for k in ['round 2','season 2','part 2','restart','resume','relaunch'])]"
-```
-
-PATCH state `lastBffCheck: <iso>` and `bffRoundActive: true|false` based on findings. If `bffRoundActive` flips to true, log `notable: "BFF round 2 detected — restore bff-skills-playbook flow"` and follow `automation-prompts/bff-skills-playbook.md` for the rebuild path.
-
-**If `codeWork.status` is `none` and `bffRoundActive` is `false`**: skip Phase 5 entirely. Bounty hunting is in Phase 4.5.
-
-**If `codeWork.status` is `none` and `bffRoundActive` is `true`**: follow `bff-skills-playbook.md` to pick a skill (Tier 1 first), set `status: "building"`, proceed to 5b.
+**If `codeWork.status` is `none`**: skip Phase 5 entirely unless Phase 4.5 explicitly handed off a multi-day bounty. Bounty hunting is in Phase 4.5.
 
 **If `codeWork.status` is already `submitted`** AND the stale sweep above didn't clear it: skip 5a and go straight to 5f to monitor.
 
 **5b. Status: `building` — Build and open PR**
 
-BFF skill submissions are no longer accepted (contest ended 2026-04-26). For the archived BFF build flow, see `automation-prompts/bff-skills-playbook.md`.
-
-For bounties: follow bounty-specific submission flow per the bounty's spec. Same state machine applies (`building → awaiting-review → fixing → submitting → submitted → none`). Use the GitHub Contents API curl pattern (Phase 6 snippet) for any push to a bounty repo. Never `git commit && git push` from this routine.
+Follow the bounty's own submission spec. Same state machine applies (`building → awaiting-review → fixing → submitting → submitted → none`). Use the GitHub Contents API curl pattern (Phase 6 snippet) for any push to a bounty repo. Never `git commit && git push` from this routine.
 
 **5c. Status: `awaiting-review` — Check automated reviews**
 
@@ -574,28 +530,28 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 7. Set `status` back to `awaiting-review`, update `lastActionAt`.
 8. Max 4 review rounds. After round 4, set `status` to `submitting` regardless (diminishing returns — let human judges evaluate).
 
-**5e. Status: `submitting` — Update fork PR and open upstream PR**
+**5e. Status: `submitting` — Open the upstream PR**
 
-BFF-only flow; archived in `automation-prompts/bff-skills-playbook.md`. Should not fire under current state (no new BFF builds). If this status ever appears with a bounty `repo`, follow the bounty's submission spec instead — most bounties are direct PRs to the bounty repo, not a fork-then-upstream pattern.
+Only fires for a bounty whose spec uses a fork-then-upstream pattern; most bounties are direct PRs to the bounty repo, in which case 5b already opened the PR of record and this status should be skipped straight to `submitted`.
 
-**5f. Status: `submitted` — Monitor upstream PR**
+**5f. Status: `submitted` — Monitor the PR**
 
-Both PRs are open. Check the upstream PR status each run:
-`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/pulls/{upstreamPrNumber}" | python3 -c "
+Check the PR status each run, against the `repo` in state:
+`curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{upstreamPrNumber}" | python3 -c "
 import sys,json
 pr = json.load(sys.stdin)
 print(json.dumps({'state': pr.get('state'), 'merged': pr.get('merged'), 'comments': pr.get('comments',0), 'review_comments': pr.get('review_comments',0)}))
 "`
 
-- If `merged: true` → skill was accepted! Set `status` to `none` and log it in `notable` (if `legionProposeEnabled` is ever true, a merged artifact with a measured outcome is prime Legion-piece material). For the BFF contest's PR #544: also check `https://www.bff.army/agents.txt` for a `DAY {X} Winner: PR #{upstreamPrNumber}` line and log winner status to runlog under `notable`.
+- If `merged: true` → accepted. Set `status` to `none` and log it in `notable` (if `legionProposeEnabled` is ever true, a merged artifact with a measured outcome is prime Legion-piece material).
 - If `state: closed` and `merged: false` → rejected. Check PR comments for feedback:
-  `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/BitflowFinance/bff-skills/issues/{upstreamPrNumber}/comments" | python3 -c "import sys,json; comments=json.load(sys.stdin); [print(f'{c[\"user\"][\"login\"]}: {c[\"body\"][:300]}') for c in comments[-5:]]"`
-  Save feedback summary to `blockedReason`, set `status` to `none`. Do not start a new BFF skill (contest ended). Do read the feedback for memory writes if a useful pattern emerges.
+  `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/issues/{upstreamPrNumber}/comments" | python3 -c "import sys,json; comments=json.load(sys.stdin); [print(f'{c[\"user\"][\"login\"]}: {c[\"body\"][:300]}') for c in comments[-5:]]"`
+  Save feedback summary to `blockedReason`, set `status` to `none`. Read the feedback for memory writes if a useful pattern emerges.
 - If `state: open` with new review comments since `lastActionAt` → human reviewers left feedback. Read it and decide:
   - If changes are requested AND `externalReviewRound < 2`: increment `externalReviewRound`, set `status` to `fixing` (re-enters fix cycle on the fork branch, then re-push to upstream).
   - If changes are requested AND `externalReviewRound >= 2`: max external rounds reached. Set `blockedReason` to `max-external-reviews` and `status` to `none`. The PR stays open but we stop spending tokens on it — operator can review manually.
   - If just questions/clarifications: respond via PR comment (does not count as a review round).
-- If `state: open` with no new activity: no action needed. Stay in `submitted` indefinitely while monitoring (don't auto-`none` after 48h — there's no new skill to start, so freeing capacity buys nothing).
+- If `state: open` with no new activity: no action needed. Stay in `submitted` while monitoring — Phase 4.5 owns the bounty pipeline and is not blocked by this slot, so there's nothing to free.
 
 **5g. Status: `blocked`**
 
