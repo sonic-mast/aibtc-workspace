@@ -112,10 +112,10 @@ Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a
 
 It fetches each mirror, compares against `origin/main`, and lands only the changed ones as one commit built in a temporary git index — the working tree is never touched, so the next ff-pull still fast-forwards. It writes nothing when everything is current, which is the usual case. Read only its last line:
 
-- `SYNC NOOP` → mirrors current, say nothing.
+- `SYNC NOOP` → mirrors current, nothing refused. Say nothing.
 - `SYNC PUSHED <sha> changed=<paths>` → **Phase 7 MUST set `reference: "<paths>"` in the run log** so the daily digest tells the operator a platform doc moved. The new content arrives in the checkout at the *next* run's ff-pull, so do not re-read the file expecting it this run.
-- `SHRANK <path>` lines → a mirror lost more than half its bytes; the script skipped it on purpose (error page, or a wholesale upstream replacement). Set `notable: "reference shrank: <path>"` and leave it for the operator — never re-run with `--allow-shrink` autonomously.
-- `FAILED` / `SYNC PUSH_FAILED` → transient; ignore, next run retries. No inline retries.
+- **Any status carrying `shrank=<paths>`** (including `SYNC REFUSED`, which means nothing landed but something was refused) → a mirror lost more than half its bytes and the script skipped it on purpose: an error page, or a wholesale upstream replacement. Set `notable: "reference shrank: <paths>"` and leave it for the operator. Never re-run with `--allow-shrink` autonomously.
+- `SYNC PUSH_FAILED`, or per-mirror `FAILED` lines → transient; ignore, next run retries. No inline retries.
 
 **Never hand-edit a file under `reference/`** — they are verbatim mirrors, and the next sync overwrites the edit. They are also snapshots, not truth: where a mirror's stated contract id, address, or parameter conflicts with a live read (`/api/state`, a `call-read`), **the chain wins**. Fix the drift upstream or in the prompt, never in the mirror.
 

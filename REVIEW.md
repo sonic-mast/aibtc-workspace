@@ -81,6 +81,14 @@ memory or docs pushes.
    including markdown, prompt, and memory files.
 7. Behavior claims need a `file:line` citation in the source, not inference
    from naming.
+8. Address / encoding round-trips are tested across the *short* case, not one
+   happy-path value. A c32 encoder that padded to a fixed width shipped past
+   this gate in PR #53 and was caught by Devin + cubic: it was verified against
+   a single address that happened to be 41 chars, while ~19% of real Stacks
+   addresses are 40 and came out with a spurious leading `0` — a wrong contract,
+   silently. Any codec touching addresses, amounts, or hex needs vectors that
+   include the boundary (leading zero bytes, minimum length, empty), and
+   "I verified it on the live value" is not coverage.
 
 ## Skip
 
