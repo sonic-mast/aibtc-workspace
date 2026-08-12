@@ -104,6 +104,21 @@ fi
 
 Reuse `IS_REMOTE` in later phases. The working tree MUST stay clean: on remote a dirty tree triggers the harness auto-PR; on local it blocks the next Phase 0 ff-pull and freezes the loop on stale code. Phases 3 and 6 keep it clean by writing only to `/tmp` or landing commits via `scripts/memory-commit.sh`, which builds them in a temporary git index — they never edit repo files in place. **If `STALE_CHECKOUT=1`, Phase 7 MUST set `notable: "STALE-CHECKOUT: phase0 ff-pull blocked, ran old code (dirty: <files>)"`** so the daily digest flags it instead of the loop drifting silently.
 
+**Reference mirror sync (local only, right after the pull).** Everything under `reference/` is a vendored snapshot of a live platform doc. Nothing kept them current before this step: they all landed in one commit on 2026-08-06 and `aibtc.news/skill.md` drifted within six days into naming an sBTC token that does not exist on-chain. Run:
+
+```bash
+[ "$IS_REMOTE" = 0 ] && ./scripts/sync-reference.sh || true
+```
+
+It fetches each mirror, compares against `origin/main`, and lands only the changed ones as one commit built in a temporary git index — the working tree is never touched, so the next ff-pull still fast-forwards. It writes nothing when everything is current, which is the usual case. Read only its last line:
+
+- `SYNC NOOP` → mirrors current, say nothing.
+- `SYNC PUSHED <sha> changed=<paths>` → **Phase 7 MUST set `reference: "<paths>"` in the run log** so the daily digest tells the operator a platform doc moved. The new content arrives in the checkout at the *next* run's ff-pull, so do not re-read the file expecting it this run.
+- `SHRANK <path>` lines → a mirror lost more than half its bytes; the script skipped it on purpose (error page, or a wholesale upstream replacement). Set `notable: "reference shrank: <path>"` and leave it for the operator — never re-run with `--allow-shrink` autonomously.
+- `FAILED` / `SYNC PUSH_FAILED` → transient; ignore, next run retries. No inline retries.
+
+**Never hand-edit a file under `reference/`** — they are verbatim mirrors, and the next sync overwrites the edit. They are also snapshots, not truth: where a mirror's stated contract id, address, or parameter conflicts with a live read (`/api/state`, a `call-read`), **the chain wins**. Fix the drift upstream or in the prompt, never in the mirror.
+
 ### Phase 0.5: Wallet circuit breaker (token guard)
 
 Read `walletUnlockFailStreak` from state (default 0). If `walletUnlockFailStreak >= 2`, the wallet has failed to unlock on at least the last two runs — skip ALL wallet-gated phases this run (Phase 3 Legion writes, 4.5 bounty_submit, paid inbox sends in Phase 2) without attempting the preamble. Run only read-only phases. Log `notable: "wallet-circuit-breaker streak=N"` so the daily digest surfaces it to the operator. Reset path: operator runs `wallet_unlock` interactively and PATCHes `walletUnlockFailStreak: 0`.
@@ -227,7 +242,16 @@ If `last_author == "sonic-mast"`, skip per rule 2. Otherwise apply rules 3–5.
 
 The off-chain newsroom (signals, beats, editors, corrections, briefs, EIC) was retired 2026-08-03 — every `news_*` MCP tool and `/api/signals*` endpoint returns `410 Gone`. aibtc.news is now a read-only window onto the **News Legion**: contribution-weighted governance on Stacks **testnet**. An agent inscribes a piece to Bitcoin ordinals, opens a proposal naming the inscription link, contributors vote with mandatory written rationales, and `conclude` pays the proposer from the pool. Full contract interface: `reference/aibtc.news/skill.md` (mirror of https://aibtc.news/skill.md). Migration history: `memory/news-gov-migration.md`.
 
-**Contracts (v6, live as of 2026-08-06):** governance `ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-gov-v6-testnet`, treasury `ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-treasury-v6`, token `STV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RJ5XDY2.sbtc-token`. The platform has forked before (v5→v6 on 2026-08-05, different deployer address) and will again — **always verify the contract id against `/api/state`'s `legions[]` entry with `live: true` before any write.**
+**Contracts (v6, live as of 2026-08-06):** governance `ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-gov-v6-testnet`, treasury `ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-treasury-v6`. The platform has forked before (v5→v6 on 2026-08-05, different deployer address) and will again — **always verify the contract id against `/api/state`'s `legions[]` entry with `live: true` before any write.**
+
+**Never hardcode the sBTC token — read it from the treasury.** `/api/state` exposes no token field at all (`legions[]` entries are only `gov`/`treasury`/`version`/`live`), so the token is the one constant with no runtime source, and a stale copy of it is what silently broke `contribute` post-conditions after the 2026-08-05 regenesis. Derive it from the chain each time you need it, using the treasury id you just verified:
+
+```bash
+python3 scripts/testnet-call.py read --contract <treasury> --fn get-token --args '[]' \
+  | python3 scripts/decode-principal.py     # -> ST….sbtc-token
+```
+
+Use that value for every balance read, `contribute` post-condition, and faucet check below. It is a vendored mock sBTC colocated with gov/treasury under the same deployer — expect it to move with them on the next fork.
 
 **Tool rules:**
 
@@ -258,8 +282,8 @@ curl -s -X POST "https://api.testnet.hiro.so/v2/contracts/call-read/<ADDR>/<NAME
 **3b. Weight bootstrap (one-time; testnet sats, no real money).** If our v6 weight is 0:
 
 1. Ensure testnet STX gas: `POST https://api.testnet.hiro.so/extended/v1/faucets/stx?address={ST…}`.
-2. Get testnet sBTC (need ≥ `minContribution`, currently 10,000 sats): try the Hiro testnet sBTC faucet (`POST https://api.testnet.hiro.so/extended/v1/faucets/sbtc?address={ST…}`); if that 404s, try `legion_faucet` ONLY after verifying it targets `STV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RJ5XDY2.sbtc-token` (it may still be v5-pinned). If neither works, set `legionStatus: "bootstrap-blocked"`, log the error in `notable`, move on.
-3. `contribute (amount uint)` on the v6 gov contract with the full faucet amount (≥10,000 sats; `u437` = below floor). Weight minted is non-refundable — that's the design, it's testnet.
+2. Get testnet sBTC (need ≥ `minContribution`, currently 10,000 sats) from **the token's own faucet** — the vendored mock ships a public `(faucet)` with no args that mints 690,000,000 units to `tx-sender`: `python3 scripts/testnet-call.py write --contract <token from get-token> --fn faucet --args '[]'`. Do NOT use the Hiro sBTC faucet (`/extended/v1/faucets/sbtc`) — it mints the real bridged token, which `contribute` rejects, and its reserve was empty anyway. `legion_faucet` is still v5-pinned. If the faucet call fails, set `legionStatus: "bootstrap-blocked"`, log the error in `notable`, move on.
+3. `contribute (amount uint)` on the v6 gov contract with the full faucet amount (≥10,000 sats; `u437` = below floor). **This moves our own tokens, so the default `--pc-mode deny` with no post-conditions aborts it** (`abort_by_post_condition`, "was moved … but not checked"). Pass an explicit FT post-condition naming the derived token: `--pc '[{"type":"ft","principal":"<our ST… address>","asset":"<token from get-token>","assetName":"sbtc-token","conditionCode":"eq","amount":"<amount>"}]'`. Same shape applies to any future `sponsor-in` or token transfer. Weight minted is non-refundable — that's the design, it's testnet.
 4. On success: PATCH `legionWeight`, log `notable: "legion weight bootstrapped: N"`.
 
 One bootstrap attempt per run, max.
@@ -695,7 +719,7 @@ Update `codeWork` fields based on Phase 5 actions.
 curl -sf -X POST "https://sonic-mast-state.brandonmarshall.workers.dev/kv/runlog-$(date -u +%Y-%m-%d)/append" \
   -H "Authorization: Bearer $STATE_API_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"ts":"...","legion":"voted 2|concluded|bootstrapped|proposed|idle|api-down|propose-disabled","legionDetail":"prop 7 yes: <rationale gist>","bounty":"...","code":"status","codeDetail":"...","gh":"replied #496, skipped 3 info-only","error":"...","notable":"free text for anything unusual"}'
+  -d '{"ts":"...","legion":"voted 2|concluded|bootstrapped|proposed|idle|api-down|propose-disabled","legionDetail":"prop 7 yes: <rationale gist>","reference":"reference/aibtc.news/skill.md","bounty":"...","code":"status","codeDetail":"...","gh":"replied #496, skipped 3 info-only","error":"...","notable":"free text for anything unusual"}'
 ```
 
 Output exactly one line:

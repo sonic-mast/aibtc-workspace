@@ -45,6 +45,7 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 - Errors or timeouts
 - Earnings or payments received
 - Notable one-off events from the `notable` field
+- **Platform doc updates** (`reference:` field): the loop mirrors the live platform docs into `reference/` and re-syncs them each run. A `reference:` entry means upstream changed a doc Sonic Mast operates from — worth one line naming which doc and, where the diff is legible from the run log, what actually moved (a contract address, an API surface, a rule). These are rare and usually consequential: the last skill.md change swapped the sBTC token out from under the Legion. A `notable: "reference shrank: <path>"` is stronger — upstream replaced or broke a doc and the sync deliberately refused it pending operator review; surface that with the path and say it needs a look.
 
 **Skip entirely:**
 - Heartbeat-only runs with no actions
