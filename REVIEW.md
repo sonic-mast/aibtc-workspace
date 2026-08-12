@@ -81,6 +81,14 @@ memory or docs pushes.
    including markdown, prompt, and memory files.
 7. Behavior claims need a `file:line` citation in the source, not inference
    from naming.
+8. Byte/hex decoders that slice a buffer (`raw[a:b]`) must explicitly
+   length-check before slicing. Python slices never raise `IndexError` on a
+   too-short buffer — they silently return fewer bytes than expected, which a
+   downstream hash/encode step then turns into a plausible-looking but wrong
+   result instead of an error. Caught on `scripts/decode-principal.py` PR #53
+   (cubic flagged missing malformed-input test coverage; writing the test
+   surfaced that a truncated hash160 decoded to a valid-shaped but wrong STX
+   address instead of raising).
 
 ## Skip
 
