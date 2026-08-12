@@ -20,10 +20,13 @@
 #   scripts/sync-reference.sh --allow-shrink   # accept bodies that shrank >50%
 #
 # Output contract (last line, parsed by the loop):
-#   SYNC NOOP                         every mirror already current
+#   SYNC NOOP                         every mirror already current, nothing refused
 #   SYNC PUSHED <sha> changed=<paths> landed on main; Phase 0 picks it up next run
+#   SYNC REFUSED shrank=<paths>       nothing to land, but a mirror was refused
 #   SYNC DRIFT changed=<paths>        --check only: mirrors are stale
 #   SYNC PUSH_FAILED changed=<paths>  fetch worked, push did not — retry next run
+# Any line may carry shrank=<paths>; a refusal never reports NOOP, and --check
+# exits 1 for a refusal as well as for drift.
 # Per-mirror lines precede it: CHANGED/UNCHANGED/SHRANK/FAILED <path> [detail]
 #
 # SHRANK is a guard, not a failure: a mirror losing more than half its bytes is
@@ -72,6 +75,7 @@ allowed_path() {
 git fetch --quiet origin main || die "git fetch origin main failed"
 
 changed=""    # space-separated paths whose upstream differs from origin/main
+shrank=""     # paths refused by the shrink guard — needs an operator, not a retry
 staged=""     # dest=src pairs for build_commit
 n_unchanged=0 n_shrank=0 n_failed=0
 
@@ -108,6 +112,7 @@ while IFS=$'\t' read -r path url; do
     # >50% loss: error page or wholesale replacement, not an edit
     if [ "$((new_size * 2))" -lt "$old_size" ]; then
       echo "SHRANK $path ${old_size}->${new_size} (skipped; --allow-shrink to accept)"
+      shrank="$shrank$path "
       n_shrank=$((n_shrank + 1))
       continue
     fi
@@ -120,15 +125,27 @@ done <<EOF
 $MANIFEST
 EOF
 
-changed_list=$(echo "$changed" | tr -s ' ' | sed 's/ $//;s/ /,/g')
+as_list() { echo "$1" | tr -s ' ' | sed 's/ $//;s/ /,/g'; }
+changed_list=$(as_list "$changed")
+shrank_list=$(as_list "$shrank")
+# every terminal line carries the refused paths — Phase 0 reads only the last
+# line, so a bare count there would make a refusal invisible to the operator
+suffix="unchanged=$n_unchanged failed=$n_failed"
+[ -n "$shrank" ] && suffix="shrank=$shrank_list $suffix"
 
 if [ -z "$changed" ]; then
-  echo "SYNC NOOP unchanged=$n_unchanged shrank=$n_shrank failed=$n_failed"
+  # a refusal is not a clean run: it needs an operator, so never report NOOP
+  if [ -n "$shrank" ]; then
+    echo "SYNC REFUSED $suffix"
+    [ "$mode" = check ] && exit 1
+    exit 0
+  fi
+  echo "SYNC NOOP $suffix"
   exit 0
 fi
 
 if [ "$mode" = check ]; then
-  echo "SYNC DRIFT changed=$changed_list unchanged=$n_unchanged shrank=$n_shrank failed=$n_failed"
+  echo "SYNC DRIFT changed=$changed_list $suffix"
   exit 1
 fi
 
@@ -146,7 +163,7 @@ tree=$(git write-tree)
 unset GIT_INDEX_FILE
 
 if [ "$tree" = "$(git rev-parse "$head^{tree}")" ]; then
-  echo "SYNC NOOP unchanged=$n_unchanged shrank=$n_shrank failed=$n_failed"
+  echo "SYNC NOOP $suffix"
   exit 0
 fi
 
@@ -155,10 +172,10 @@ commit=$(git commit-tree "$tree" -p "$head" -m "$msg")
 [ -n "$commit" ] || die "commit-tree produced no sha"
 
 if git push --quiet origin "$commit:refs/heads/main" 2>"$TMP/push.err"; then
-  echo "SYNC PUSHED $commit changed=$changed_list unchanged=$n_unchanged shrank=$n_shrank failed=$n_failed"
+  echo "SYNC PUSHED $commit changed=$changed_list $suffix"
   exit 0
 fi
 
 cat "$TMP/push.err" >&2
-echo "SYNC PUSH_FAILED changed=$changed_list unchanged=$n_unchanged shrank=$n_shrank failed=$n_failed"
+echo "SYNC PUSH_FAILED changed=$changed_list $suffix"
 exit 1
