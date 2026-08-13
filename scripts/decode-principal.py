@@ -6,13 +6,17 @@ contract is actually wired here" (the Legion treasury's `get-token`, most
 importantly) are therefore unusable without this step, which is how the loop
 ended up carrying a hardcoded sBTC token that no longer exists on-chain.
 
-Handles the two principal encodings and unwraps a single (ok ...) response:
+Handles the two principal encodings:
   0x05 <ver:1> <hash160:20>                      -> standard principal
   0x06 <ver:1> <hash160:20> <len:1> <name>       -> contract principal
+
+(ok ...) and (some ...) wrappers are peeled, including nested; an (err ...)
+raises rather than being unwrapped to whatever it carries.
 
 Usage:
   scripts/decode-principal.py 0x061ab750...6e   # -> ST2VN…KKP9SKW.sbtc-token
   testnet-call.py read ... | jq -r .result.result | scripts/decode-principal.py
+  scripts/decode-principal.py --selftest        # offline vectors, no network
 """
 import hashlib
 import json
