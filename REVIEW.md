@@ -89,6 +89,13 @@ memory or docs pushes.
    silently. Any codec touching addresses, amounts, or hex needs vectors that
    include the boundary (leading zero bytes, minimum length, empty), and
    "I verified it on the live value" is not coverage.
+9. Byte/hex decoders that slice a buffer (`raw[a:b]`) must explicitly
+   length-check before slicing. Python slices never raise `IndexError` on a
+   too-short buffer — they silently return fewer bytes than expected, which a
+   downstream hash/encode step then turns into a plausible-looking but wrong
+   result instead of an error. Same PR #53 decoder, found while writing the
+   check-8 coverage: a truncated hash160 decoded to a valid-shaped but wrong
+   STX address instead of raising.
 
 ## Skip
 
