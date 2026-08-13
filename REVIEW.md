@@ -101,5 +101,13 @@ memory or docs pushes.
 
 - `memory/**`, `MEMORY.md` — memory notes, not code.
 - `logs/**`, `automation-state/**` — machine-written.
+- `reference/**` — verbatim upstream mirrors re-synced by
+  `scripts/sync-reference.sh`. Not our code and not editable: any fix would be
+  overwritten by the next sync, so findings here are unactionable by
+  construction. Expect recurring false positives (upstream's
+  `"sponsorApiKey": "x402_sk_live_..."` schema placeholder reads as a secret;
+  documented contract ids read as hardcoding) — the mirrors are data, and where
+  one conflicts with a live read, the chain wins. A mirror that genuinely goes
+  bad surfaces as the sync's `shrank=` refusal, not as a review finding.
 - Prose-only changes in `automation-prompts/**/*.md` — but review embedded
   code blocks (bash / python snippets the loop executes) like code.
