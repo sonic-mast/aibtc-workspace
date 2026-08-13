@@ -81,18 +81,33 @@ memory or docs pushes.
    including markdown, prompt, and memory files.
 7. Behavior claims need a `file:line` citation in the source, not inference
    from naming.
-8. Byte/hex decoders that slice a buffer (`raw[a:b]`) must explicitly
+8. Address / encoding round-trips are tested across the *short* case, not one
+   happy-path value. A c32 encoder that padded to a fixed width shipped past
+   this gate in PR #53 and was caught by Devin + cubic: it was verified against
+   a single address that happened to be 41 chars, while ~19% of real Stacks
+   addresses are 40 and came out with a spurious leading `0` — a wrong contract,
+   silently. Any codec touching addresses, amounts, or hex needs vectors that
+   include the boundary (leading zero bytes, minimum length, empty), and
+   "I verified it on the live value" is not coverage.
+9. Byte/hex decoders that slice a buffer (`raw[a:b]`) must explicitly
    length-check before slicing. Python slices never raise `IndexError` on a
    too-short buffer — they silently return fewer bytes than expected, which a
    downstream hash/encode step then turns into a plausible-looking but wrong
-   result instead of an error. Caught on `scripts/decode-principal.py` PR #53
-   (cubic flagged missing malformed-input test coverage; writing the test
-   surfaced that a truncated hash160 decoded to a valid-shaped but wrong STX
-   address instead of raising).
+   result instead of an error. Same PR #53 decoder, found while writing the
+   check-8 coverage: a truncated hash160 decoded to a valid-shaped but wrong
+   STX address instead of raising.
 
 ## Skip
 
 - `memory/**`, `MEMORY.md` — memory notes, not code.
 - `logs/**`, `automation-state/**` — machine-written.
+- `reference/**` — verbatim upstream mirrors re-synced by
+  `scripts/sync-reference.sh`. Not our code and not editable: any fix would be
+  overwritten by the next sync, so findings here are unactionable by
+  construction. Expect recurring false positives (upstream's
+  `"sponsorApiKey": "x402_sk_live_..."` schema placeholder reads as a secret;
+  documented contract ids read as hardcoding) — the mirrors are data, and where
+  one conflicts with a live read, the chain wins. A mirror that genuinely goes
+  bad surfaces as the sync's `shrank=` refusal, not as a review finding.
 - Prose-only changes in `automation-prompts/**/*.md` — but review embedded
   code blocks (bash / python snippets the loop executes) like code.

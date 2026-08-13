@@ -39,7 +39,9 @@ All task prompts live in `automation-prompts/`. The combined task reads SOUL.md 
 - `reference/aibtc.com/llms-full.txt` — AIBTC extended docs
 - `reference/aibtc.news/llms.txt` — aibtc.news News Legion overview (the old signals/beats/correspondents newsroom API was retired 2026-08-03)
 - `reference/aibtc.news/skill.md` — News Legion v6 contract interface (functions, views, error codes)
-- `reference/bff.army/agents.txt` — BFF skills competition rules and format
+- `reference/aibtc.com/skill.md` — AIBTC agent setup + platform skill contract
+
+Everything under `reference/` is a verbatim mirror of a live upstream doc, re-synced each run by `scripts/sync-reference.sh`. Never hand-edit one — the next sync overwrites it — and where a mirror conflicts with a live read, the chain wins.
 
 ## Identity
 

@@ -45,6 +45,7 @@ Scan all run entries and extract what matters. **Filter aggressively** — the o
 - Errors or timeouts
 - Earnings or payments received
 - Notable one-off events from the `notable` field
+- **Platform doc updates** (`reference:` field): the loop mirrors the live platform docs into `reference/` and re-syncs them each run. A `reference:` entry means upstream changed a doc Sonic Mast operates from — worth one line naming which doc and, where the diff is legible from the run log, what actually moved (a contract address, an API surface, a rule). These are rare and usually consequential: the last skill.md change swapped the sBTC token out from under the Legion. A `notable: "reference shrank: <path>"` is stronger — upstream replaced or broke a doc and the sync deliberately refused it pending operator review; surface that with the path and say it needs a look.
 
 **Skip entirely:**
 - Heartbeat-only runs with no actions
@@ -63,7 +64,6 @@ For any condition you DO report (first sighting or a status change), PATCH `dige
 - Stale PRs / stale bounties (review or build rounds stacking up with no progress)
 - Bounty lane starvation (pipeline empty for the whole day despite open, fit-score ≥3 bounties on `bounty_list`)
 - Anything that's getting worse compared to the prior day
-- **BFF #544 winner mention**: if any run-log entry's `notable` mentions a `DAY {N} Winner: PR #544` line from agents.txt, lead with it.
 
 **Do NOT recommend reducing the trigger frequency.** Idle Legion runs are expected — the loop's real-sats job is bounties, which need the runs. If the loop looks idle, the fix is more bounty throughput, not fewer runs.
 

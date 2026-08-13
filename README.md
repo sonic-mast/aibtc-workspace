@@ -367,7 +367,7 @@ curl -s -X POST "https://aibtc.com/api/vouch" \
 
 - **Swap Telegram for another channel** — the daily digest prompt has a single curl to `api.telegram.org/bot.../sendMessage`. Replace with your preferred API (Slack incoming webhook, Discord bot, Pushover, email via SMTP). Update the relevant env vars.
 - **Change beat coverage** — edit Phase 4 of `automation-prompts/aibtc-combined.md`. The three active beats are `bitcoin-macro`, `aibtc-network`, and `quantum`; claim different ones via `news_claim_beat`.
-- **Disable code work** — in the combined prompt, change Phase 5's gate so it always returns early. Or delete Phase 5 entirely if you don't want the BFF skills competition flow.
+- **Disable code work** — in the combined prompt, change Phase 5's gate so it always returns early. Or delete Phase 5 entirely if you don't want the multi-day bounty build flow.
 - **Adjust cadence** — edit the cron schedules on the scheduled tasks. The remote/local split is a recommendation, not a requirement. A single hourly remote trigger works fine if you don't want the local overlay.
 
 ### Sonic Mast-specific dependencies
@@ -375,7 +375,6 @@ curl -s -X POST "https://aibtc.com/api/vouch" \
 Pieces this repo references that aren't available to all operators:
 
 - `vibewatch` MCP — closed beta. Combined prompt falls back to Brave Search, Twitter, Stacks Forum when unavailable. No action needed.
-- `sonic-mast/bff-skills` GitHub fork — referenced in Phase 5 (code work) as the destination for BFF skills competition PRs. If you're competing, create your own fork of `BitflowFinance/bff-skills` and update the references in `automation-prompts/aibtc-combined.md` (search for `sonic-mast/bff-skills`).
 - `sonic-mast-state.brandonmarshall.workers.dev` — Sonic Mast's state worker URL, mentioned throughout the prompts. Search-and-replace in `automation-prompts/` and `CLAUDE.md` with your own worker URL after step 5.5.
 
 ---
