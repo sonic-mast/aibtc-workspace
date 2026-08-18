@@ -1,6 +1,6 @@
 ---
 name: state-api-reliability
-description: Four independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, and the classifier blocking the python3-heredoc env-fix workaround itself
+description: Five independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, the classifier blocking the python3-heredoc env-fix workaround itself, and top-level /state fields silently shadow-diverging from same-named /kv/<key> entries
 metadata:
   type: feedback
 ---
@@ -57,3 +57,11 @@ Observed 2026-07-23T20:xxZ: the exact `python3 -c "... open('.env') ... write('/
 **Why:** the classifier appears to judge the *shape* of the command (read `.env` wholesale → write a sourceable file, or read `.env` wholesale → print var lengths including sensitive ones like `AIBTC_WALLET_PASSWORD`/`GEMINI_API_KEY`) rather than the actual data flow. The narrower, single-token `grep '^VAR=' .env | cut -d= -f2` pattern from #3 was not blocked in the same run and worked immediately for `STATE_API_TOKEN`.
 
 **How to apply:** Don't reach for the python3-heredoc/`/tmp/env_fixed.sh` pattern as a first move — treat it as a fallback only, and expect it may be denied. Default to the narrow `export VAR=$(grep '^VAR=' .env | cut -d= -f2)` per-var pattern from #3, re-run at the top of every Bash call that needs it (shell state doesn't persist across calls). It's more typing across a run but has actually worked across multiple runs now, unlike the "better" bulk fix. If a run genuinely needs many vars (10+) and per-var grep is too slow, try the bulk fix once — if the classifier denies it, don't retry with variations (per the session-escalation gotcha in `automode-classifier-session-escalation`), just fall back to per-var `grep|cut` for whichever vars are actually needed this run rather than all of them defensively.
+
+## 5. Top-level `/state` fields can silently shadow-diverge from `/kv/<same-name>` — the combined prompt's Phase 5b gates use the KV copy, not the state-object field
+
+Observed 2026-08-18: the main `/state` object carries top-level fields `lastPlatformReleaseCheck`, `lastRefCodeCheck` (and by the same pattern, presumably `lastEarningsCheck`/`lastLegionReview` if ever added there) — but these are a **separate, stale copy** from the `/kv/lastPlatformReleaseCheck` etc. keys the combined prompt's Phase 5b text explicitly names ("gate to once per 24h via the `lastPlatformReleaseCheck` **KV key**"). Confirmed by writing `2026-08-18T09:10:41Z` to `/kv/lastPlatformReleaseCheck` and immediately re-GETting `/state`: its `lastPlatformReleaseCheck` field still read `2026-08-16T17:09:43Z` — two days stale, untouched by the KV write. The state object's copy looks like a leftover from before these gates moved to KV-based storage (or a field some other code path still writes), not a live mirror.
+
+**Why:** two independently-updated stores share a field name by coincidence of naming history. A `GET /state` alone is not enough to check whether a Phase 5b gate is due — you have to hit the actual `/kv/<key>` endpoint the prompt specifies.
+
+**How to apply:** For any Phase 5b-style once-per-24h/72h gate (`lastPlatformReleaseCheck`, `lastRefCodeCheck`, `lastEarningsCheck`, `lastLegionReview`), always read AND write via `/kv/<key>`, never trust or update the same-named field inside the full `/state` object — it's a decoy. If a future cleanup pass touches state schema, consider deleting the vestigial top-level fields from `/state` entirely so this can't misdirect a future run that greps the wrong copy.
