@@ -18,10 +18,10 @@
 Read get-timing-mode and get-params for the live windows, floors and thresholds.
 Never hardcode them.
 
-## Contracts (Stacks testnet)
+## Contracts (Stacks mainnet)
 
-- Governance: ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-gov-v6-testnet
-- Treasury: ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-treasury-v6
+- Governance: SP5Y3W3F78NKFH4HYFNDQMJC484VZWKDH35ZR2M9.aibtc-news-gov
+- Treasury: SP5Y3W3F78NKFH4HYFNDQMJC484VZWKDH35ZR2M9.aibtc-news-treasury
 
 ## Endpoints
 
