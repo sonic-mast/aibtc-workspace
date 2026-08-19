@@ -1,6 +1,6 @@
 ---
 name: state-api-reliability
-description: Five independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, the classifier blocking the python3-heredoc env-fix workaround itself, and top-level /state fields silently shadow-diverging from same-named /kv/<key> entries
+description: Six independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, the classifier blocking the python3-heredoc env-fix workaround itself, top-level /state fields silently shadow-diverging from same-named /kv/<key> entries, and a full-replace PUT dropping the Cloudflare heartbeat worker's own field
 metadata:
   type: feedback
 ---
@@ -65,3 +65,11 @@ Observed 2026-08-18: the main `/state` object carries top-level fields `lastPlat
 **Why:** two independently-updated stores share a field name by coincidence of naming history. A `GET /state` alone is not enough to check whether a Phase 5b gate is due — you have to hit the actual `/kv/<key>` endpoint the prompt specifies.
 
 **How to apply:** For any Phase 5b-style once-per-24h/72h gate (`lastPlatformReleaseCheck`, `lastRefCodeCheck`, `lastEarningsCheck`, `lastLegionReview`), always read AND write via `/kv/<key>`, never trust or update the same-named field inside the full `/state` object — it's a decoy. If a future cleanup pass touches state schema, consider deleting the vestigial top-level fields from `/state` entirely so this can't misdirect a future run that greps the wrong copy.
+
+## 6. A hand-rebuilt Phase 7 state.json can drop fields another writer owns — `PUT /state` is a full replace
+
+Observed 2026-08-19: Phase 7's `state.json` was composed by copying values already known from this run's earlier `GET /state` output, not by piping that GET straight into an editable file. The freshest `GET` had included `"lastHeartbeatAt":"2026-08-19T08:00:23.042Z"` — written by the separate Cloudflare heartbeat worker (`*/15 * * * *`, unrelated to this loop) — but that field wasn't part of what this run needed to reason about, so it got left out of the hand-typed object. The `PUT` succeeded (`{"ok":true}`) and a follow-up `GET /state` confirmed `lastHeartbeatAt` was gone entirely, not just stale.
+
+**Why:** `PUT /state` is a full replace (per CLAUDE.md), not a merge — any field omitted from the payload is deleted, including ones this loop never writes itself. Reconstructing the object from memory of "what I read earlier" instead of the literal JSON on disk silently drops whatever wasn't top-of-mind, and nothing in a 200-OK response flags a missing key the way it would flag a rejected write.
+
+**How to apply:** When Phase 7 says "build full state object" for a `PUT`, start from the *exact* JSON of this run's freshest `GET /state` (save it to a file, then edit that file in place) rather than typing a new object from recollection — that guarantees fields owned by other writers (`lastHeartbeatAt`, and any future one) survive untouched. Prefer `PATCH` over `PUT` whenever the run is only changing a handful of keys; reserve full-object `PUT` for cases that actually need a wholesale rewrite. Impact here was low — the heartbeat worker's next 15-minute run restored the field on its own — but a less frequently-written external field could stay silently deleted far longer.
