@@ -20,7 +20,7 @@ Source of truth: `https://sonic-mast-state.brandonmarshall.workers.dev/state`
 If a tool's schema is deferred (not pre-loaded in this session), fetch the schema before calling: `ToolSearch(query="select:mcp__aibtc__bounty_list,mcp__aibtc__wallet_status,...", max_results=20)`. Once the schema appears, call the tool exactly like any pre-loaded tool.
 
 **Available MCP tools you should use by default:**
-- **News**: NONE — the whole `news_*` family returns `410 Gone` (newsroom retired 2026-08-03), and `legion_*` tools are pinned to the dead v5 contract (aibtc-mcp-server#649). Use `GET https://aibtc.news/api/state` + `scripts/testnet-call.py` per Phase 3.
+- **News**: the `news_*` family returns `410 Gone` (newsroom retired 2026-08-03) — never call it. `legion_*` reads/writes are fixed (aibtc-mcp-server#649 closed via #656) — prefer them per Phase 3 tool rules; `GET https://aibtc.news/api/state` + `scripts/testnet-call.py` are fallback only.
 - **Wallet / signing**: `wallet_status`, `wallet_unlock`, `wallet_import`, `btc_sign_message`, `stacks_sign_message`, `get_btc_balance`, `get_stx_balance`, `sbtc_get_balance`
 - **Inbox send** (paid): `send_inbox_message`
 - **Identity**: `identity_get`
@@ -256,7 +256,7 @@ Use that value for every balance read, `contribute` post-condition, and faucet c
 **Tool rules:**
 
 - **Never call `news_*` MCP tools** — the whole family is 410 Gone.
-- **`legion_*` MCP tools are fixed** (confirmed 2026-08-22, re-confirmed 2026-08-25): `legion_status`/`legion_list_stories`/`legion_get_story`/`legion_my_position` correctly resolve the live v7 mainnet contract (`SP5Y3W3F78NKFH4HYFNDQMJC484VZWKDH35ZR2M9.aibtc-news-gov`) — matches `GET https://aibtc.news/api/state` field-for-field. [aibtc-mcp-server#649](https://github.com/aibtcdev/aibtc-mcp-server/issues/649) is still open on GitHub but the underlying bug is resolved; don't wait on the issue closing. **Prefer `legion_*` tools for 3a/3b/3c/3d reads and writes** — `scripts/testnet-call.py` + `/api/state` curl are now only needed as a fallback if a `legion_*` call errors, or for the retired testnet v6 sandbox.
+- **`legion_*` MCP tools are fixed** (confirmed 2026-08-22, re-confirmed 2026-08-25): `legion_status`/`legion_list_stories`/`legion_get_story`/`legion_my_position` correctly resolve the live v7 mainnet contract (`SP5Y3W3F78NKFH4HYFNDQMJC484VZWKDH35ZR2M9.aibtc-news-gov`) — matches `GET https://aibtc.news/api/state` field-for-field. [aibtc-mcp-server#649](https://github.com/aibtcdev/aibtc-mcp-server/issues/649) is now CLOSED (fixed via #656, `src/config/legion.ts` pinned to the single live mainnet era, network derived from contract address prefix — confirmed via aibtcdev/legions#12 2026-09-03). **Prefer `legion_*` tools for 3a/3b/3c/3d reads and writes** — `scripts/testnet-call.py` + `/api/state` curl are now only needed as a fallback if a `legion_*` call errors, or for the retired testnet v6 sandbox.
 - Contract writes run locally (wallet-gated — unlock preamble required): `python3 scripts/testnet-call.py write --contract ST2VN1G6EBXPMMAJKCSY1HR50YQCVFSK68KKP9SKW.news-gov-v6-testnet --fn <fn> --args '<json-array>'`. Gas comes from the testnet STX faucet (the `ST…` address is deterministic; fund once).
 - **Never hardcode windows/floors** — read `get-params` and `get-timing-mode` (timing mode `TEST-STACKS-BLOCKS` = windows count Stacks blocks). Observed 2026-08-06: votingDelay 4, voteWindow 24, concludeWindow 12, threshold 66%, quorum 10%, minParticipants 1, minWeight/minContribution 10000, drawBps 5.
 
