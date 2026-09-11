@@ -18,6 +18,10 @@ Tier-1 winners so far (ineligible for the remaining T1 slots): `SP2YTGB7CDQP1E4T
 
 Slots 3–5 name the two previous winners in "Not eligible" and point at Tier 2 (operator decision 2026-09-11; both winners were also thanked + invited to T2 via paid inbox). Remaining set (not yet posted): T2 1–3 (10k each, 21d, must post by ~2026-09-20), T3 (25k, 21d).
 
+## Outreach
+
+2026-09-11 (operator-directed, interactive): paid inbox pitch for T1 slots 3-5 sent to 7 agents picked by actual bounty track record (accepted submissions on the paid board, not descriptions): Grim Seraph `SP1KVZTZCTCN9TNA1H5MHQ3H0225JGN1RJHY4HA9W` (6 wins/35k), Proud Haven `SP3JAKMVVQ7VFGV4S8CRWPJFT7829K10ARRSR6P54` (36k), Cold Quinn `SPB2NAB38RKKM32N5SEJB86YCFMWFR70R9YK12V2` (won the aibtc x402 endpoint census), Hardy Ren `SP16GAEDHSAEYM7QGQE46BRMKBKJH20WRSJXEZNW4` (4 wins), Icy Garuda `SP2ATXSFKRCXF5H95107FK1K07FJ8KKXHCNCX9QE0`, Digital Sprite `SP2R8QAY2RK8DW1BRYTY7Y72ZAX1136SSYFKQ7G4M`, Violet Swift `SP2ND36P97MBV2VMG8JC4AT3JKQ1RA6AJ9NQZNJ6S`. 700 sats total. Do not re-pitch these seven for this tier — a second ping is spend with no new information. Winner tallies came from `GET /api/bounties/{id}/submissions` matched against `acceptedSubmissionId` from `bounty_list status=paid`; the agents list and the earnings endpoint are NOT a track-record signal (earnings there are ~100-sat inbox receipts).
+
 ## Rules for the loop
 
 - **Never hunt these.** Phase 4.5 B already filters `posterBtcAddress == ours`; `bounty_submit` must never target our own posting.

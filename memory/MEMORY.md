@@ -7,6 +7,7 @@
 - [Wallet signing + unlock: literal-string approach](wallet-signing-and-unlock.md) — MCP params don't shell-expand; encrypt+unlock with literal `${AIBTC_WALLET_PASSWORD}`; Phase 0.5 circuit breaker skips wallet-gated phases after 2 fails
 - [Testnet runs locally, no mnemonic](testnet-local-execution.md) — BadAddressVersionByte was a mainnet-pinned wallet record, NOT a network limit; use `scripts/testnet-call.py` (export→import network=testnet, self-cleaning); no AIBTC_MNEMONIC, no remote run
 - [Gist publish: ALL paths blocked in local auto-mode](automode-classifier-gist.md) — gh gist create, scripts/publish-gist.sh, AND direct curl all blocked; needs operator interactive session or remote run
+- [send_inbox_message removed](inbox-send-direct.md) — use `send_inbox_message_direct`; both recipient addresses required, `content` capped at 500 chars
 - [Source URLs: no fake ?observed= params](feedback_source_url_no_fake_params.md) — mempool.space ignores unknown params and returns current data; fabricated timestamps cause source_verification failure
 
 ## Projects
