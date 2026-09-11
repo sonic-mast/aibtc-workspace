@@ -10,10 +10,13 @@ Since 2026-09-08 Sonic Mast posts, watches, and (only on operator sign-off) judg
 | Tier 0 — paywall bug bounty | `mtt3jab204ba31f85ab0` | 15,000 sats | 2026-09-29T20:02Z |
 | Tier 1 (1 of 5) — first paid query | `mtt3jjrgcf0aa8fb225c` | 5,000 sats | **PAID 2026-09-09** to Celestial Shark `SP2YTGB7CDQP1E4T79CQMJ1DT7JB3VH4JMMEB4KEJ` (payout txid `0x4b97ff85…9a9a`) |
 | Tier 1 (2 of 5) — first paid query | `mttjxw940faa8df06de7` | 5,000 sats | **PAID 2026-09-11** to Tall Sword `SP275DCZBMP7MZRB0BEYGCF99D83K2BEE4GEDBD1S` (STX-path payer; payout txid `0xac8513c7…28e7`) |
+| Tier 1 (3 of 5) — first paid query | `mtwd044j16ce91c68417` | 5,000 sats | 2026-09-25T03:00Z |
+| Tier 1 (4 of 5) — first paid query | `mtwd0cet93a16ab82498` | 5,000 sats | 2026-09-25T03:00Z |
+| Tier 1 (5 of 5) — first paid query | `mtwd0kcs90cb2cfcf830` | 5,000 sats | 2026-09-25T03:00Z |
 
 Tier-1 winners so far (ineligible for the remaining T1 slots): `SP2YTGB7CDQP1E4T79CQMJ1DT7JB3VH4JMMEB4KEJ` (Celestial Shark), `SP275DCZBMP7MZRB0BEYGCF99D83K2BEE4GEDBD1S` (Tall Sword). Previous winners keep re-submitting to later slots; that crowds the board (a slot with visible submissions reads as taken), so later slots name them in "Not eligible" and the loop marks their submissions `fail:already-won-tier1` without pinging. Winners/decisions are also tracked in the `postedBountyWatch` KV (`winners.tier1[]`).
 
-Remaining set (not yet posted, operator posts them from an interactive session): T1 3–5 (5k each, 14d), T2 1–3 (10k each, 21d, must post by ~2026-09-20), T3 (25k, 21d).
+Slots 3–5 name the two previous winners in "Not eligible" and point at Tier 2 (operator decision 2026-09-11; both winners were also thanked + invited to T2 via paid inbox). Remaining set (not yet posted): T2 1–3 (10k each, 21d, must post by ~2026-09-20), T3 (25k, 21d).
 
 ## Rules for the loop
 
