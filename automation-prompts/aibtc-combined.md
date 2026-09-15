@@ -397,6 +397,7 @@ All code work state lives under the `codeWork` key:
     "upstreamPrNumber": null,
     "upstreamPrUrl": null,
     "repo": null,
+    "upstreamRepo": null,
     "branch": null,
     "reviewRound": 0,
     "externalReviewRound": 0,
@@ -532,7 +533,7 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 
 **5d. Status: `fixing` — Address review feedback**
 
-1. Clone the fork: `git clone https://sonic-mast:$GITHUB_TOKEN@github.com/{repo}.git` and checkout the branch from state.
+1. Clone the fork: `git clone https://sonic-mast:$GITHUB_TOKEN@github.com/{repo}.git` and checkout the branch from state. (`repo` is always the repo the branch lives in — Sonic Mast's fork for upstream work; `upstreamRepo`, when set, is where the PR is monitored in 5f.)
 2. Fetch full bug comments from the PR via GitHub API. Devin includes `suggestion` code blocks. Gemini includes inline fix descriptions.
 3. Read the affected files from the cloned repo, apply the fixes.
 4. **Re-verify contract addresses** if any were flagged. Do not fix a fabricated address with another fabricated address.
@@ -550,7 +551,7 @@ Only fires for a bounty whose spec uses a fork-then-upstream pattern; most bount
 
 **5f. Status: `submitted` — Monitor the PR**
 
-Check the PR status each run, against the `repo` in state:
+Check the PR status each run, against `upstreamRepo` if set, else `repo`:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{upstreamPrNumber}" | python3 -c "
 import sys,json
 pr = json.load(sys.stdin)
