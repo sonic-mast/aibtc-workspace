@@ -10,3 +10,6 @@ node_modules/
 .wrangler/
 workers/*/.wrangler/
 automation-state/
+
+# Local-only operator/agent material (campaign runbooks, grant-related notes). Never pushed; the loop reads it from the local checkout.
+private/

@@ -144,6 +144,7 @@ if [ "$mode" = "commit" ]; then
     case "$pair" in *=*) ;; *) die "bad arg '$pair' (want dest=/tmp/src or dest=@delete)";; esac
     dest="${pair%%=*}"; src="${pair#*=}"
     allowed_path "$dest" || die "path not allowed: $dest (only MEMORY.md and memory/<name>.md)"
+    git check-ignore -q --no-index "$dest" && die "path is gitignored (local-only): $dest"
     if [ "$src" = "@delete" ]; then
       [ "$dest" != "MEMORY.md" ] || die "refusing to delete MEMORY.md"
       git cat-file -e "origin/main:$dest" 2>/dev/null || die "@delete for $dest but it does not exist on origin/main"
