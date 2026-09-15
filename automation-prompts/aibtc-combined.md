@@ -398,6 +398,7 @@ All code work state lives under the `codeWork` key:
     "upstreamPrUrl": null,
     "repo": null,
     "upstreamRepo": null,
+    "ownedBy": "loop",
     "branch": null,
     "reviewRound": 0,
     "externalReviewRound": 0,
@@ -550,6 +551,8 @@ print(json.dumps({'bugs': len(bugs), 'analysis': len(analysis), 'details': [{'bo
 Only fires for a bounty whose spec uses a fork-then-upstream pattern; most bounties are direct PRs to the bounty repo, in which case 5b already opened the PR of record and this status should be skipped straight to `submitted`.
 
 **5f. Status: `submitted` — Monitor the PR**
+
+**Interactive ownership.** If `codeWork.ownedBy` is `"interactive"`, an operator session is driving this PR: never enter `fixing`, never push to its branch, never reply on it. Only detect merged/closed (handle as below) and log any new comment since `lastActionAt` as `notable: "pr <n> new comment from <login>"` for the operator. (2026-09-15: the loop and an interactive session both pushed fixes for the same review to aibtcdev/skills#423 within 30 minutes; the loop's commit had to be force-replaced.)
 
 Check the PR status each run, against `upstreamRepo` if set, else `repo`:
 `curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/{repo}/pulls/{upstreamPrNumber}" | python3 -c "
