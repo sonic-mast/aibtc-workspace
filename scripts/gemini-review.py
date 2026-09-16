@@ -115,9 +115,13 @@ def _diff(repo: str, base: str) -> str:
             "changes (" + ", ".join(tracked_dirty) + ") — the diff reviews the "
             "worktree while a push ships HEAD; commit or clean before reviewing"
         )
+    # errors="replace": one stray non-UTF-8 byte anywhere in the diff range
+    # (a Windows-1252 em dash in an unrelated file) must not kill the whole
+    # review — it degrades that byte, not the gate.
     return subprocess.run(
         ["git", "diff", merge_base],
         cwd=repo, capture_output=True, text=True, check=True,
+        encoding="utf-8", errors="replace",
     ).stdout
 
 
