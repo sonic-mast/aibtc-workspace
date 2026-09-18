@@ -24,7 +24,7 @@ fi
 
 _from_env_file() {  # $1 = var name; prints value (quotes stripped) or nothing
   [ -f "$ENV_FILE" ] || return 0
-  grep -m1 "^\(export \)\?$1=" "$ENV_FILE" | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//' -e 's/[[:space:]]*$//'
+  grep -m1 "^\(export \)\?$1=" "$ENV_FILE" | cut -d= -f2- | sed -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//'
 }
 
 TOKEN="${TELEGRAM_BOT_TOKEN:-$(_from_env_file TELEGRAM_BOT_TOKEN)}"
