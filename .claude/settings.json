@@ -31,11 +31,9 @@
       "Bash(source .env)",
       "Bash(wait)",
       "mcp__scheduled-tasks__list_scheduled_tasks",
-      "Write(/tmp/*)",
+      "Edit(/tmp/*)",
       "Read(/tmp/*)",
-      "Write(automation-state/*)",
       "Edit(automation-state/*)",
-      "Write(reference/*)",
       "Edit(reference/*)",
       "WebSearch"
     ]
