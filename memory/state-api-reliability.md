@@ -1,6 +1,6 @@
 ---
 name: state-api-reliability
-description: Six independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, the classifier blocking the python3-heredoc env-fix workaround itself, top-level /state fields silently shadow-diverging from same-named /kv/<key> entries, and a full-replace PUT dropping the Cloudflare heartbeat worker's own field
+description: Seven independent state-API/env reliability gotchas — a local curl DNS/routing failure (exit 7/6, incl. 1.1.1.1 SERVFAIL), a PATCH that silently returns/lands a stale snapshot, env vars (STATE_API_TOKEN etc.) not being pre-exported/safely sourceable in a fresh local Bash shell, the classifier blocking the python3-heredoc env-fix workaround itself, top-level /state fields silently shadow-diverging from same-named /kv/<key> entries, a full-replace PUT dropping the Cloudflare heartbeat worker's own field, and POST being rejected on an object-valued /kv/:key (only arrays get atomic append; objects need GET-merge-PUT)
 metadata:
   type: feedback
 ---
@@ -73,3 +73,11 @@ Observed 2026-08-19: Phase 7's `state.json` was composed by copying values alrea
 **Why:** `PUT /state` is a full replace (per CLAUDE.md), not a merge — any field omitted from the payload is deleted, including ones this loop never writes itself. Reconstructing the object from memory of "what I read earlier" instead of the literal JSON on disk silently drops whatever wasn't top-of-mind, and nothing in a 200-OK response flags a missing key the way it would flag a rejected write.
 
 **How to apply:** When Phase 7 says "build full state object" for a `PUT`, start from the *exact* JSON of this run's freshest `GET /state` (save it to a file, then edit that file in place) rather than typing a new object from recollection — that guarantees fields owned by other writers (`lastHeartbeatAt`, and any future one) survive untouched. Prefer `PATCH` over `PUT` whenever the run is only changing a handful of keys; reserve full-object `PUT` for cases that actually need a wholesale rewrite. Impact here was low — the heartbeat worker's next 15-minute run restored the field on its own — but a less frequently-written external field could stay silently deleted far longer.
+
+## 7. `POST /kv/:key` only works for array-valued keys (atomic append) — an object-valued key needs GET-merge-PUT
+
+Observed 2026-09-22: tried to record a new posted-bounty-watch entry with `curl -X POST .../kv/postedBountyWatch -d '{...}'`, expecting a merge like CLAUDE.md's documented `POST /kv/:key/append` atomic-array-append. Got a clean `{"error":"method POST not allowed on /kv/:key"} HTTP 405` — no ambiguity, but easy to reach for by analogy with the append endpoint, which does accept POST (at the `/append` sub-path, only for arrays).
+
+**Why:** the state Worker draws a hard line between arrays (which get a dedicated `/kv/:key/append` POST for atomic add-one-element) and everything else (objects, scalars), which only support `GET`/`PUT`/`DELETE` at the bare `/kv/:key` path — there is no merge-PUT or PATCH equivalent for a KV value the way `/state` itself supports PATCH-as-merge. `postedBountyWatch` is a nested object (`{bountyId: {seen: {submissionId: {...}}}}`), not an array, so the append endpoint doesn't apply and neither does a plain POST.
+
+**How to apply:** Before writing to any `/kv/<key>` that holds an object (not a JSON array), always `GET` the current value first, merge the new field into it in Python/jq, and `PUT` the whole merged object back — never assume POST will merge. Only reach for `POST .../kv/<key>/append` when the KV value is genuinely a JSON array and you want to add one element atomically.
